@@ -1,0 +1,28 @@
+{
+  "primary": "#FF3B30",
+  "primaryDark": "#B71C1C",
+  "primaryNeon": "#FF2A54",
+  "secondary": "#00E5FF",
+  "secondaryDark": "#0097A7",
+  "accent": "#FFD700",
+  "accentOrange": "#FF9100",
+  "background": "#0D1117",
+  "backgroundCard": "#161B22",
+  "backgroundSurface": "#21262D",
+  "roadAsphalt": "#1A1D24",
+  "roadStripe": "#FEE440",
+  "roadBorder": "#FFFFFF",
+  "textPrimary": "#FFFFFF",
+  "textSecondary": "#8B949E",
+  "textMuted": "#484F58",
+  "success": "#00E676",
+  "danger": "#FF1744",
+  "warning": "#FFD600",
+  "nitro": "#00F0FF",
+  "coin": "#FFD700",
+  "overlay": "rgba(13, 17, 23, 0.88)",
+  "overlayLight": "rgba(13, 17, 23, 0.5)",
+  "border": "#30363D",
+  "borderLight": "#3F4756"
+}
+
