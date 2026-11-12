@@ -82,7 +82,7 @@ export const POWERUPS = {
     id: 'shield',
     icon: '🛡️',
     title: 'Safe Mode',
-    duration: 15, // seconds - extended safe zone
+    duration: 10, // seconds - strictly 10s safe zone
     color: '#00E5FF',
   },
   MAGNET: {

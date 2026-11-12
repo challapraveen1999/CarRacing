@@ -23,15 +23,27 @@ export const loadAllGameData = async () => {
     if (typeof AsyncStorage.getMany === 'function') {
       const records = await AsyncStorage.getMany(keys);
       if (records) {
-        Object.entries(records).forEach(([key, value]) => {
-          if (value !== null && value !== undefined) {
-            try {
-              data[key] = JSON.parse(value);
-            } catch {
-              data[key] = value;
+        if (Array.isArray(records)) {
+          records.forEach(([key, value]) => {
+            if (value !== null && value !== undefined) {
+              try {
+                data[key] = JSON.parse(value);
+              } catch {
+                data[key] = value;
+              }
             }
-          }
-        });
+          });
+        } else {
+          Object.entries(records).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) {
+              try {
+                data[key] = JSON.parse(value);
+              } catch {
+                data[key] = value;
+              }
+            }
+          });
+        }
       }
     } else if (typeof AsyncStorage.multiGet === 'function') {
       const pairs = await AsyncStorage.multiGet(keys);

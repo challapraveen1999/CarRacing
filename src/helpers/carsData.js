@@ -18,6 +18,7 @@ export const CARS = [
       stripes: '#FFFFFF',
       glow: 'rgba(255, 59, 48, 0.5)',
     },
+    themeColor: '#FF2A54',
     icon: '🏎️',
   },
   {
@@ -34,11 +35,12 @@ export const CARS = [
       nitro: 75,
     },
     colors: {
-      body: '#00E5FF',
+      body: '#00A8FF',
       roof: '#0B1C28',
       stripes: '#FEE440',
-      glow: 'rgba(0, 229, 255, 0.5)',
+      glow: 'rgba(0, 168, 255, 0.5)',
     },
+    themeColor: '#00A8FF',
     icon: '⚡',
   },
   {
@@ -60,6 +62,7 @@ export const CARS = [
       stripes: '#FF0080',
       glow: 'rgba(255, 0, 128, 0.5)',
     },
+    themeColor: '#FF0080',
     icon: '🔮',
   },
   {
@@ -81,6 +84,7 @@ export const CARS = [
       stripes: '#FFFFFF',
       glow: 'rgba(255, 214, 0, 0.5)',
     },
+    themeColor: '#FFD600',
     icon: '🔥',
   },
   {
@@ -102,6 +106,7 @@ export const CARS = [
       stripes: '#000000',
       glow: 'rgba(229, 9, 20, 0.5)',
     },
+    themeColor: '#FF1744',
     icon: '👑',
   },
   {
@@ -123,6 +128,7 @@ export const CARS = [
       stripes: '#7C4DFF',
       glow: 'rgba(124, 77, 255, 0.5)',
     },
+    themeColor: '#7C4DFF',
     icon: '🖤',
   },
 ];
@@ -130,4 +136,15 @@ export const CARS = [
 export const getCarById = carId => {
   return CARS.find(car => car.id === carId) || CARS[0];
 };
+
+export const getCarThemeColor = carOrId => {
+  const car = typeof carOrId === 'string' ? getCarById(carOrId) : carOrId;
+  if (!car) return '#FF2A54';
+  if (car.themeColor) return car.themeColor;
+  if (car.colors?.body && car.colors.body !== '#FFFFFF' && car.colors.body !== '#1C1E24') {
+    return car.colors.body;
+  }
+  return car.colors?.stripes || '#FF2A54';
+};
+
 

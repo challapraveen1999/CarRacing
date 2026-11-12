@@ -149,9 +149,14 @@ const GameScreen = ({ navigation, route }) => {
   const [obstacles, setObstacles] = useState([]);
   const [coins, setCoins] = useState([]);
   const [powerupItems, setPowerupItems] = useState([]);
+  const [launchedVehicles, setLaunchedVehicles] = useState([]);
   const obstaclesRef = useRef([]);
   const coinsRef = useRef([]);
   const powerupItemsRef = useRef([]);
+  const launchedVehiclesRef = useRef([]);
+  const safeHitCounterRef = useRef(0);
+  const playerHopAnim = useRef(new Animated.Value(1)).current;
+  const shieldBurstAnim = useRef(new Animated.Value(0)).current;
   const shiftLaneRef = useRef(null);
   const hasSwipedInCurrentGesture = useRef(false);
   const isGameOverProcessedRef = useRef(false);
@@ -188,6 +193,7 @@ const GameScreen = ({ navigation, route }) => {
   const comboTimerRef = useRef(null);
   const loopIdRef = useRef(null);
   const hudThrottleRef = useRef(0);
+  const countdownTimersRef = useRef([]);
 
   // Load Selected Car from storage and run 3, 2, 1, GO sound flow
   useEffect(() => {
@@ -218,11 +224,11 @@ const GameScreen = ({ navigation, route }) => {
       setIsCountingDown(false);
     }, 4000);
 
+    countdownTimersRef.current = [t1, t2, t3, t4];
+
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
+      countdownTimersRef.current.forEach(t => clearTimeout(t));
+      countdownTimersRef.current = [];
       if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
       stopEngineLoop();
       stopMusic();
@@ -241,44 +247,10 @@ const GameScreen = ({ navigation, route }) => {
           score: finalScore,
           distance: finalDistance,
           coinsEarned: finalCoins,
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
   }, []);
-
-  // Hardware Back button handling: Persist race stats and navigate cleanly
-  useEffect(() => {
-    const onBackPress = () => {
-      (async () => {
-        const finalScore = stateRef.current.score || 0;
-        const finalDistance = Math.floor(stateRef.current.distance || 0);
-        const finalCoins = stateRef.current.coinsCollected || 0;
-
-        if (!isGameOverProcessedRef.current && (finalScore > 0 || finalDistance > 0 || finalCoins > 0)) {
-          isGameOverProcessedRef.current = true;
-          try {
-            await recordRaceResult({
-              score: finalScore,
-              distance: finalDistance,
-              coinsEarned: finalCoins,
-            });
-          } catch (e) {
-            console.warn('Error saving race result on back press:', e);
-          }
-        }
-
-        stopEngineLoop();
-        stopMusic();
-        stopAll();
-        setShowGameOverOverlay(false);
-        navigation.navigate('Home');
-      })();
-      return true;
-    };
-
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
-  }, [navigation]);
 
   // Real Moving Smoke Plume & Blast Animation Loop (runs dynamically on crash)
   useEffect(() => {
@@ -365,7 +337,6 @@ const GameScreen = ({ navigation, route }) => {
     const clampedLane = Math.max(0, Math.min(LANE_COUNT - 1, targetLane));
     if (clampedLane === playerLaneRef.current) return;
 
-    playDash();
     const direction = clampedLane > playerLaneRef.current ? 1 : -1;
     playerLaneRef.current = clampedLane;
 
@@ -506,6 +477,30 @@ const GameScreen = ({ navigation, route }) => {
       setComboActive(false);
     }, 2800);
   }, []);
+
+  // Safe Zone Collision: Player Car Shockwave Hop & Kinetic Pulse
+  const triggerPlayerRamHop = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(playerHopAnim, {
+        toValue: 1.18,
+        duration: 75,
+        useNativeDriver: true,
+      }),
+      Animated.spring(playerHopAnim, {
+        toValue: 1.0,
+        friction: 4,
+        tension: 130,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    shieldBurstAnim.setValue(0);
+    Animated.timing(shieldBurstAnim, {
+      toValue: 1,
+      duration: 380,
+      useNativeDriver: true,
+    }).start();
+  }, [playerHopAnim, shieldBurstAnim]);
 
   // Temporary Notification Banner (Near miss, Shield, Checkpoint)
   const triggerNotification = (text, color = colors.secondary) => {
@@ -650,29 +645,34 @@ const GameScreen = ({ navigation, route }) => {
     obstaclesRef.current = [];
     coinsRef.current = [];
     powerupItemsRef.current = [];
+    launchedVehiclesRef.current = [];
+    safeHitCounterRef.current = 0;
     setObstacles([]);
     setCoins([]);
     setPowerupItems([]);
+    setLaunchedVehicles([]);
     setSkidMarks([]);
     shiftLane(1);
     lastTimeRef.current = null;
 
     // Start 3-2-1-GO flow on the road track
+    countdownTimersRef.current.forEach(t => clearTimeout(t));
     setIsCountingDown(true);
     setCountdownText('3');
     playCountdownSound();
 
-    setTimeout(() => setCountdownText('2'), 1000);
-    setTimeout(() => {
+    const rt1 = setTimeout(() => setCountdownText('2'), 1000);
+    const rt2 = setTimeout(() => {
       setCountdownText('1');
       playStartSound(); // Ignition revs at 1!
     }, 2000);
-    setTimeout(() => {
+    const rt3 = setTimeout(() => {
       setCountdownText('GO!');
       startEngineLoop(); // Clean engine takeover at GO!
       playMusic();
     }, 3000);
-    setTimeout(() => setIsCountingDown(false), 4000);
+    const rt4 = setTimeout(() => setIsCountingDown(false), 4000);
+    countdownTimersRef.current = [rt1, rt2, rt3, rt4];
   }, [
     modeConfig,
     shiftLane,
@@ -684,6 +684,115 @@ const GameScreen = ({ navigation, route }) => {
     smokePuffAnim2,
     smokePuffAnim3,
   ]);
+
+  // Pause Drive Mode and display in-game popup modal
+  const handlePauseGame = useCallback(() => {
+    if (stateRef.current.isGameOver) return;
+    playEffect('button');
+    stateRef.current.isPaused = true;
+    setIsPaused(true);
+    countdownTimersRef.current.forEach(t => clearTimeout(t));
+    countdownTimersRef.current = [];
+    stopEngineLoop();
+    pauseMusic();
+  }, []);
+
+  // Continue / Resume Drive Mode
+  const handleResumeGame = useCallback(() => {
+    playEffect('button');
+    stateRef.current.isPaused = false;
+    setIsPaused(false);
+    lastTimeRef.current = null;
+    if (!isCountingDown) {
+      startEngineLoop();
+      playMusic();
+    }
+  }, [isCountingDown]);
+
+  // Restart Race from Pause Modal
+  const handleRestartFromPause = useCallback(() => {
+    setIsPaused(false);
+    stateRef.current.isPaused = false;
+    stopEngineLoop();
+    stopMusic();
+    stopAll();
+    handleRestartGame();
+  }, [handleRestartGame]);
+
+  // Back to Home from Pause Modal
+  const handleHomeFromPause = useCallback(async () => {
+    playEffect('button');
+    setIsPaused(false);
+    stateRef.current.isPaused = false;
+    countdownTimersRef.current.forEach(t => clearTimeout(t));
+    countdownTimersRef.current = [];
+    stopEngineLoop();
+    stopMusic();
+    stopAll();
+
+    const finalCoins = stateRef.current.coinsCollected || hudCoins || 0;
+    const finalScore = stateRef.current.score || hudScore || 0;
+    const finalDistance = Math.floor(stateRef.current.distance || hudDistance || 0);
+
+    if (!isGameOverProcessedRef.current && (finalCoins > 0 || finalScore > 0 || finalDistance > 0)) {
+      isGameOverProcessedRef.current = true;
+      try {
+        await recordRaceResult({
+          score: finalScore,
+          distance: finalDistance,
+          coinsEarned: finalCoins,
+        });
+      } catch (e) {
+        console.warn('Error saving race result on Home nav:', e);
+      }
+    }
+    navigation.navigate('Home');
+  }, [hudCoins, hudScore, hudDistance, navigation]);
+
+  // Intercept back option in app and hardware/gesture navigation
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. If Game Over overlay is active, save stats and go Home
+      if (stateRef.current.isGameOver || showGameOverOverlay) {
+        (async () => {
+          const finalScore = stateRef.current.score || hudScore || 0;
+          const finalDistance = Math.floor(stateRef.current.distance || hudDistance || 0);
+          const finalCoins = stateRef.current.coinsCollected || hudCoins || 0;
+          if (!isGameOverProcessedRef.current && (finalScore > 0 || finalDistance > 0 || finalCoins > 0)) {
+            isGameOverProcessedRef.current = true;
+            try {
+              await recordRaceResult({
+                score: finalScore,
+                distance: finalDistance,
+                coinsEarned: finalCoins,
+              });
+            } catch (e) {
+              console.warn('Error saving race result on back press:', e);
+            }
+          }
+          stopEngineLoop();
+          stopMusic();
+          stopAll();
+          setShowGameOverOverlay(false);
+          navigation.navigate('Home');
+        })();
+        return true;
+      }
+
+      // 2. If Pause Modal is already open, resume drive mode (Continue)
+      if (stateRef.current.isPaused || isPaused) {
+        handleResumeGame();
+        return true;
+      }
+
+      // 3. During active Drive Mode: Pause the game, stop driving sounds, and show the Pause Modal!
+      handlePauseGame();
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [navigation, showGameOverOverlay, isPaused, hudScore, hudDistance, hudCoins, handlePauseGame, handleResumeGame]);
 
   // Main 60 FPS Game Loop
   useEffect(() => {
@@ -802,20 +911,39 @@ const GameScreen = ({ navigation, route }) => {
         }
       }
 
-      // 6. Spawn Traffic Obstacles
+      // 6. Spawn Traffic Obstacles (Cars, Vans, Trucks, Buses)
       timeSinceObstacle.current += delta;
       const dynamicSpawnRate = Math.max(0.7, 1.6 - (state.distance / 4000) * 0.7);
       if (timeSinceObstacle.current > dynamicSpawnRate) {
         timeSinceObstacle.current = 0;
         const randomLane = Math.floor(Math.random() * LANE_COUNT);
-        const trafficColors = [colors.danger, colors.warning, '#9C27B0', '#FF9800', '#4CAF50'];
+        const trafficColors = [colors.danger, colors.warning, '#9C27B0', '#FF9800', '#4CAF50', '#00BCD4', '#E91E63'];
         const randomColor = trafficColors[Math.floor(Math.random() * trafficColors.length)];
+
+        // Traffic variety: Sports Cars, Delivery Vans, Cargo Trucks, Transit Buses
+        const vehicleTypes = ['sports', 'sports', 'van', 'truck', 'bus'];
+        const chosenType = vehicleTypes[Math.floor(Math.random() * vehicleTypes.length)];
+        let width = 46;
+        let height = 82;
+        if (chosenType === 'van') {
+          width = 48;
+          height = 88;
+        } else if (chosenType === 'truck') {
+          width = 50;
+          height = 104;
+        } else if (chosenType === 'bus') {
+          width = 50;
+          height = 114;
+        }
 
         obstaclesRef.current.push({
           id: nextId.current++,
           lane: randomLane,
-          y: -100,
+          y: -120,
           color: randomColor,
+          vehicleType: chosenType,
+          width,
+          height,
           hasTriggeredNearMiss: false,
         });
       }
@@ -870,22 +998,56 @@ const GameScreen = ({ navigation, route }) => {
 
       for (const obs of obstaclesRef.current) {
         const nextY = obs.y + state.speed * 1.15 * delta;
-        const obsX = ROAD_LEFT + obs.lane * LANE_WIDTH + (LANE_WIDTH - 46) / 2;
+        const obsWidth = obs.width || 46;
+        const obsHeight = obs.height || 82;
+        const obsX = ROAD_LEFT + obs.lane * LANE_WIDTH + (LANE_WIDTH - obsWidth) / 2;
         const obsRect = {
           x: obsX,
           y: nextY,
-          width: 46,
-          height: 82,
+          width: obsWidth,
+          height: obsHeight,
         };
 
         // Collision Check
         if (checkCollision(playerRect, obsRect, 0.12)) {
           if (state.shield || activeShield) {
             // SAFE MODE ACTIVE: Car health is 100% protected and NEVER decreased!
-            // Deflect/destroy obstacle safely while safe mode remains active
+            // Catapult & launch obstacle airborne, jumping completely out of the track!
             playCollisionSound();
-            state.score += 50; // Bonus score for deflecting traffic in safe mode
-            triggerNotification('🛡️ SAFE MODE: DEFLECTED! (0 HP DAMAGE)', colors.secondary);
+            playDash();
+
+            // Determine sideways launch trajectory: strictly alternate Left (-1) and Right (+1) on each hit!
+            safeHitCounterRef.current += 1;
+            const isLeft = safeHitCounterRef.current % 2 === 1;
+            const launchSide = isLeft ? -1 : 1;
+            const launchVx = launchSide * (340 + Math.random() * 120);
+            const launchVy = -180 - Math.random() * 100;
+
+            launchedVehiclesRef.current.push({
+              id: nextId.current++,
+              x: obsX,
+              y: nextY,
+              vx: launchVx,
+              vy: launchVy,
+              rotation: 0,
+              rotSpeed: launchSide * (640 + Math.random() * 220),
+              scale: 1.0,
+              maxLife: 0.95,
+              life: 0.95,
+              color: obs.color,
+              vehicleType: obs.vehicleType || 'sports',
+              width: obsWidth,
+              height: obsHeight,
+            });
+
+            // Player car suspension hop & shield kinetic burst
+            triggerPlayerRamHop();
+
+            state.score += 100; // Takedown reward bonus score
+            state.nitroFuel = Math.min(100, state.nitroFuel + 15); // Reward +15% nitro fuel
+            const label = obs.vehicleType === 'truck' ? '🚚 TRUCK' : obs.vehicleType === 'bus' ? '🚌 BUS' : obs.vehicleType === 'van' ? '🚐 VAN' : '🚗 TRAFFIC';
+            const directionLabel = isLeft ? 'LEFT ⬅️' : 'RIGHT ➡️';
+            triggerNotification(`🚀 TAKEDOWN! ${label} JUMPED ${directionLabel} OUT OF TRACK! (+100 PTS)`, '#00E5FF');
             continue; // Safely deflect and eliminate obstacle, zero damage to car
           } else if (state.invulnerableTimer > 0) {
             // Post-accident recovery grace window: zero damage
@@ -946,6 +1108,23 @@ const GameScreen = ({ navigation, route }) => {
 
       obstaclesRef.current = nextObstacles;
       setObstacles(nextObstacles);
+
+      // Synchronous Update for Airborne Launched Vehicles (Safe Zone Takedown Jump Physics)
+      const nextLaunched = [];
+      for (const lv of launchedVehiclesRef.current) {
+        lv.life -= delta;
+        if (lv.life > 0) {
+          lv.x += lv.vx * delta;
+          lv.y += lv.vy * delta;
+          lv.rotation += lv.rotSpeed * delta;
+          const progress = 1 - (lv.life / lv.maxLife);
+          // Parabolic jump arc: zooms up to 1.7x at apex, casting shadow below, then flies off track
+          lv.scale = 1.0 + Math.sin(progress * Math.PI) * 0.7;
+          nextLaunched.push(lv);
+        }
+      }
+      launchedVehiclesRef.current = nextLaunched;
+      setLaunchedVehicles(nextLaunched);
 
       // IMMEDIATE GAME OVER WHEN CAR HEALTH IS 0
       if (didCrash || state.health <= 0) {
@@ -1021,7 +1200,7 @@ const GameScreen = ({ navigation, route }) => {
           }
           if (item.def.id === 'shield') {
             state.shield = true;
-            const shieldDur = item.def.duration || 15;
+            const shieldDur = item.def.duration || 10;
             state.shieldTimer = shieldDur;
             setActiveShield(true);
             setShieldTimeRemaining(shieldDur);
@@ -1077,79 +1256,9 @@ const GameScreen = ({ navigation, route }) => {
         cancelAnimationFrame(loopIdRef.current);
       }
     };
-  }, [isPaused, modeConfig, handleGameOver, isCountingDown, triggerCombo, playerTiltAnim, activeShield]);
+  }, [isPaused, modeConfig, handleGameOver, isCountingDown, triggerCombo, triggerPlayerRamHop, playerTiltAnim, activeShield]);
 
-  // Pause Menu Handler
-  const handlePause = () => {
-    stateRef.current.isPaused = true;
-    setIsPaused(true);
-    stopEngineLoop();
-    pauseMusic();
-    playEffect('button');
 
-    navigation.navigate('Pause', {
-      onResume: () => {
-        stateRef.current.isPaused = false;
-        setIsPaused(false);
-        lastTimeRef.current = null;
-        startEngineLoop();
-        playMusic();
-      },
-      onRestart: () => {
-        stateRef.current.isPaused = false;
-        stateRef.current.isGameOver = false;
-        stateRef.current.distance = 0;
-        stateRef.current.score = 0;
-        stateRef.current.coinsCollected = 0;
-        stateRef.current.nearMissCount = 0;
-        stateRef.current.comboStreak = 1;
-        stateRef.current.nitroFuel = 100;
-        stateRef.current.health = 100;
-        stateRef.current.invulnerableTimer = 0;
-        stateRef.current.shield = false;
-        stateRef.current.magnet = false;
-        stateRef.current.timeRemaining = modeConfig.timeLimit;
-        setIsPaused(false);
-        setIsCrashed(false);
-        setIsBlast(false);
-        setIsDamaged(false);
-        setIsSmashed(false);
-        setShowFogEffects(false);
-        setHudHealth(100);
-        crashAnim.setValue(0);
-        fogAnim.setValue(0);
-        blastAnim.setValue(0);
-        isGameOverProcessedRef.current = false;
-        obstaclesRef.current = [];
-        coinsRef.current = [];
-        powerupItemsRef.current = [];
-        setObstacles([]);
-        setCoins([]);
-        setPowerupItems([]);
-        setSkidMarks([]);
-        shiftLane(1);
-        lastTimeRef.current = null;
-        playStartSound();
-        startEngineLoop();
-        playMusic();
-      },
-      onExit: async () => {
-        stopEngineLoop();
-        stopMusic();
-        stopAll();
-        const finalCoins = stateRef.current.coinsCollected || 0;
-        const finalScore = stateRef.current.score || 0;
-        const finalDistance = Math.floor(stateRef.current.distance || 0);
-        if (finalCoins > 0 || finalScore > 0 || finalDistance > 0) {
-          await recordRaceResult({
-            score: finalScore,
-            distance: finalDistance,
-            coinsEarned: finalCoins,
-          });
-        }
-      },
-    });
-  };
 
   const interpolatedTilt = playerTiltAnim.interpolate({
     inputRange: [-12, 12],
@@ -1206,26 +1315,26 @@ const GameScreen = ({ navigation, route }) => {
 
       {/* Highway Road Canvas */}
       <View style={[styles.road, { width: ROAD_WIDTH, left: ROAD_LEFT }]}>
-        {/* Red & White Asphalt Curbs / Rumble Strips (Left & Right) */}
+        {/* White & Black Racing Track Dividers / Curbs (Left & Right) */}
         <View style={styles.curbLeft}>
-          {Array.from({ length: 16 }).map((_, i) => (
+          {Array.from({ length: 24 }).map((_, i) => (
             <View
               key={i}
               style={[
                 styles.curbStripe,
-                (i + Math.floor(roadOffset / 20)) % 2 === 0 ? styles.curbRed : styles.curbWhite,
+                (i + Math.floor(roadOffset / 24)) % 2 === 0 ? styles.curbBlack : styles.curbWhite,
               ]}
             />
           ))}
         </View>
 
         <View style={styles.curbRight}>
-          {Array.from({ length: 16 }).map((_, i) => (
+          {Array.from({ length: 24 }).map((_, i) => (
             <View
               key={i}
               style={[
                 styles.curbStripe,
-                (i + Math.floor(roadOffset / 20)) % 2 === 0 ? styles.curbRed : styles.curbWhite,
+                (i + Math.floor(roadOffset / 24)) % 2 === 0 ? styles.curbBlack : styles.curbWhite,
               ]}
             />
           ))}
@@ -1313,9 +1422,11 @@ const GameScreen = ({ navigation, route }) => {
           );
         })}
 
-        {/* Traffic Obstacles */}
+        {/* Traffic Obstacles (Cars, Vans, Trucks, Buses) */}
         {obstacles.map(obs => {
-          const obsX = obs.lane * LANE_WIDTH + (LANE_WIDTH - 46) / 2;
+          const obsWidth = obs.width || 46;
+          const obsHeight = obs.height || 82;
+          const obsX = obs.lane * LANE_WIDTH + (LANE_WIDTH - obsWidth) / 2;
           return (
             <View
               key={obs.id}
@@ -1324,17 +1435,67 @@ const GameScreen = ({ navigation, route }) => {
                 {
                   left: obsX,
                   top: obs.y,
+                  width: obsWidth,
+                  height: obsHeight,
                 },
               ]}>
               <CarSprite
-                width={46}
-                height={82}
+                width={obsWidth}
+                height={obsHeight}
                 bodyColor={obs.color}
                 stripeColor="#21262D"
                 roofColor="#0D1117"
-                vehicleType="sports"
+                vehicleType={obs.vehicleType || 'sports'}
               />
             </View>
+          );
+        })}
+
+        {/* Airborne Launched Vehicles (Safe Zone Takedown Jump Physics) */}
+        {launchedVehicles.map(lv => {
+          const shadowOffset = (lv.scale - 1.0) * 38;
+          return (
+            <React.Fragment key={lv.id}>
+              {/* 3D Ground Shadow below jumping vehicle */}
+              <View
+                style={[
+                  styles.launchedVehicleShadow,
+                  {
+                    left: lv.x + shadowOffset * 0.4,
+                    top: lv.y + shadowOffset,
+                    width: lv.width * 0.9,
+                    height: lv.height * 0.4,
+                    opacity: Math.max(0.12, 0.45 - (lv.scale - 1.0) * 0.35),
+                  },
+                ]}
+              />
+
+              {/* Airborne Vehicle: Jumping, Spinning & Flying out of track */}
+              <View
+                style={[
+                  styles.launchedVehicleWrapper,
+                  {
+                    left: lv.x,
+                    top: lv.y,
+                    transform: [
+                      { scale: lv.scale },
+                      { rotate: `${Math.round(lv.rotation)}deg` },
+                    ],
+                  },
+                ]}>
+                <View style={styles.launchedSparksAura} />
+                <CarSprite
+                  width={lv.width}
+                  height={lv.height}
+                  bodyColor={lv.color}
+                  stripeColor="#FFFFFF"
+                  roofColor="#0D1117"
+                  vehicleType={lv.vehicleType}
+                  isDamaged={true}
+                  isSmashed={true}
+                />
+              </View>
+            </React.Fragment>
           );
         })}
 
@@ -1347,9 +1508,30 @@ const GameScreen = ({ navigation, route }) => {
               transform: [
                 { translateX: playerXAnim },
                 { rotate: isCrashed ? interpolatedCrashSpin : interpolatedTilt },
+                { scale: playerHopAnim },
               ],
             },
           ]}>
+          {/* Shield Kinetic Burst Ring on ramming */}
+          <Animated.View
+            style={[
+              styles.shieldBurstRing,
+              {
+                opacity: shieldBurstAnim.interpolate({
+                  inputRange: [0, 0.4, 1],
+                  outputRange: [0, 0.9, 0],
+                }),
+                transform: [
+                  {
+                    scale: shieldBurstAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1.0, 2.8],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
           {/* Headlight beams projected onto road (broken if smashed) */}
           {!isSmashed && <View style={styles.headlightBeams} />}
 
@@ -1599,6 +1781,15 @@ const GameScreen = ({ navigation, route }) => {
       <View style={styles.dashboardContainer}>
         {/* Main Dashboard Cluster */}
         <View style={styles.dashCluster}>
+          {/* In-App Back Navigation Button */}
+          <TouchableOpacity
+            style={styles.hudBackButton}
+            activeOpacity={0.7}
+            onPress={handlePauseGame}
+            accessibilityLabel="Back or Pause">
+            <Text style={styles.hudBackButtonIcon}>‹</Text>
+          </TouchableOpacity>
+
           {/* Left: Speedometer & Gear */}
           <View style={styles.dashLeft}>
             <View style={styles.gearBadge}>
@@ -1632,15 +1823,23 @@ const GameScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* Right: Coins & Pause */}
+          {/* Right: Coins, Settings & Pause */}
           <View style={styles.dashRight}>
             <View style={styles.coinPill}>
               <Text style={styles.coinPillText}>🪙 {hudCoins}</Text>
             </View>
             <TouchableOpacity
+              style={styles.settingsCircle}
+              activeOpacity={0.7}
+              onPress={handlePauseGame}
+              accessibilityLabel="Settings or Pause">
+              <Text style={styles.settingsCircleText}>⚙️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.pauseCircle}
               activeOpacity={0.7}
-              onPress={handlePause}>
+              onPress={handlePauseGame}
+              accessibilityLabel="Pause Game">
               <Text style={styles.pauseCircleText}>⏸</Text>
             </TouchableOpacity>
           </View>
@@ -1821,6 +2020,85 @@ const GameScreen = ({ navigation, route }) => {
           <Text style={styles.pedalSubtextCyan}>BOOST</Text>
         </TouchableOpacity>
       </View>
+
+      {/* In-Game Pause ("game push") Popup Modal */}
+      <Modal
+        visible={isPaused && !showGameOverOverlay}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+        onRequestClose={handleResumeGame}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.trackPauseCard}>
+            {/* Header Icon */}
+            <View style={styles.pauseIconBadge}>
+              <Text style={styles.pauseIconBadgeEmoji}>⏸️</Text>
+            </View>
+
+            {/* Modal Title & Subtitle */}
+            <Text style={styles.trackPauseTitle}>GAME PAUSED</Text>
+            <Text style={styles.trackPauseSubtitle}>DRIVE MODE SUSPENDED</Text>
+
+            {/* Live Run Performance Strip */}
+            <View style={styles.pauseStatsContainer}>
+              <View style={styles.pauseStatBox}>
+                <Text style={styles.pauseStatLabel}>SCORE</Text>
+                <Text style={[styles.pauseStatValue, { color: colors.primaryNeon }]}>
+                  {Number(hudScore || 0).toLocaleString()}
+                </Text>
+                <Text style={styles.pauseStatUnit}>PTS</Text>
+              </View>
+
+              <View style={styles.pauseStatDivider} />
+
+              <View style={styles.pauseStatBox}>
+                <Text style={styles.pauseStatLabel}>DISTANCE</Text>
+                <Text style={[styles.pauseStatValue, { color: colors.secondary }]}>
+                  {Number(hudDistance || 0).toLocaleString()}
+                </Text>
+                <Text style={styles.pauseStatUnit}>METERS</Text>
+              </View>
+
+              <View style={styles.pauseStatDivider} />
+
+              <View style={styles.pauseStatBox}>
+                <Text style={styles.pauseStatLabel}>COINS</Text>
+                <Text style={[styles.pauseStatValue, { color: colors.accent }]}>
+                  +{hudCoins}
+                </Text>
+                <Text style={styles.pauseStatUnit}>EARNED</Text>
+              </View>
+            </View>
+
+            {/* 3 Explicit Action Buttons: CONTINUE, RESTART, BACK TO HOME */}
+            <View style={styles.pauseActionsColumn}>
+              {/* 1. CONTINUE Option */}
+              <TouchableOpacity
+                style={styles.pauseContinueButton}
+                activeOpacity={0.85}
+                onPress={handleResumeGame}>
+                <Text style={styles.pauseContinueButtonText}>▶ CONTINUE</Text>
+              </TouchableOpacity>
+
+              {/* 2. RESTART Option */}
+              <TouchableOpacity
+                style={styles.pauseRestartButton}
+                activeOpacity={0.85}
+                onPress={handleRestartFromPause}>
+                <Text style={styles.pauseRestartButtonText}>🔄 RESTART</Text>
+              </TouchableOpacity>
+
+              {/* 3. BACK TO HOME Option */}
+              <TouchableOpacity
+                style={styles.pauseHomeButton}
+                activeOpacity={0.85}
+                onPress={handleHomeFromPause}>
+                <Text style={styles.pauseHomeButtonText}>🏠 BACK TO HOME</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* On-Track Game Over & Coin Collection Modal */}
       <Modal
@@ -2053,29 +2331,37 @@ const styles = StyleSheet.create({
   },
   curbLeft: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
+    top: -40,
+    bottom: -40,
     left: 0,
-    width: 8,
+    width: 9,
     flexDirection: 'column',
+    borderRightWidth: 1,
+    borderColor: '#30363D',
   },
   curbRight: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
+    top: -40,
+    bottom: -40,
     right: 0,
-    width: 8,
+    width: 9,
     flexDirection: 'column',
+    borderLeftWidth: 1,
+    borderColor: '#30363D',
   },
   curbStripe: {
-    width: 8,
-    height: 48,
+    width: 9,
+    height: 38,
   },
-  curbRed: {
-    backgroundColor: '#E53935',
+  curbBlack: {
+    backgroundColor: '#0D1117',
+    borderBottomWidth: 1,
+    borderColor: '#21262D',
   },
   curbWhite: {
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderColor: '#E6EDF3',
   },
   laneDivider: {
     position: 'absolute',
@@ -2085,9 +2371,51 @@ const styles = StyleSheet.create({
   stripe: {
     width: 4,
     height: ROAD_CONFIG.STRIPE_HEIGHT,
-    backgroundColor: colors.roadStripe,
+    backgroundColor: '#FFFFFF',
     marginBottom: ROAD_CONFIG.STRIPE_GAP,
     borderRadius: 2,
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+  },
+  launchedVehicleShadow: {
+    position: 'absolute',
+    backgroundColor: '#000000',
+    borderRadius: 20,
+    zIndex: 2,
+  },
+  launchedVehicleWrapper: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  launchedSparksAura: {
+    position: 'absolute',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(0, 229, 255, 0.25)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 230, 0, 0.8)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+  },
+  shieldBurstRing: {
+    position: 'absolute',
+    width: PLAYER_WIDTH * 1.5,
+    height: PLAYER_HEIGHT * 1.5,
+    borderRadius: PLAYER_HEIGHT * 0.75,
+    borderWidth: 3,
+    borderColor: '#00E5FF',
+    backgroundColor: 'rgba(0, 229, 255, 0.2)',
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    zIndex: 8,
   },
   skidMark: {
     position: 'absolute',
@@ -2399,6 +2727,37 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '800',
     fontSize: 12,
+  },
+  hudBackButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0D1117',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 6,
+  },
+  hudBackButtonIcon: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    marginTop: -2,
+  },
+  settingsCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0D1117',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 6,
+  },
+  settingsCircleText: {
+    fontSize: 13,
   },
   pauseCircle: {
     width: 32,
@@ -2743,6 +3102,141 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 18,
     paddingVertical: 20,
+  },
+  trackPauseCard: {
+    width: '100%',
+    maxWidth: 355,
+    backgroundColor: 'rgba(22, 27, 34, 0.98)',
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 229, 255, 0.5)',
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    alignItems: 'center',
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.65,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+  pauseIconBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderWidth: 1.5,
+    borderColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  pauseIconBadgeEmoji: {
+    fontSize: 26,
+  },
+  trackPauseTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: colors.textPrimary,
+    letterSpacing: 2,
+  },
+  trackPauseSubtitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.secondary,
+    letterSpacing: 2.5,
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  pauseStatsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    width: '100%',
+    backgroundColor: 'rgba(13, 17, 23, 0.85)',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(48, 54, 61, 0.7)',
+    marginBottom: 20,
+  },
+  pauseStatBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  pauseStatLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    letterSpacing: 1.2,
+    marginBottom: 3,
+  },
+  pauseStatValue: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  pauseStatUnit: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: colors.textMuted,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  pauseStatDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(48, 54, 61, 0.8)',
+  },
+  pauseActionsColumn: {
+    width: '100%',
+    gap: 10,
+  },
+  pauseContinueButton: {
+    backgroundColor: colors.primaryNeon,
+    paddingVertical: 15,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: colors.primaryNeon,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  pauseContinueButtonText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    fontStyle: 'italic',
+  },
+  pauseRestartButton: {
+    backgroundColor: 'rgba(33, 38, 45, 0.95)',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  pauseRestartButtonText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  pauseHomeButton: {
+    backgroundColor: 'rgba(255, 23, 68, 0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 23, 68, 0.45)',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  pauseHomeButtonText: {
+    color: '#FF6B81',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
   modalScrollContent: {
     alignItems: 'center',

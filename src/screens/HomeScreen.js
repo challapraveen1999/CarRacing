@@ -11,20 +11,23 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import colors from '../helpers/colorCodes.json';
 import { loadAllGameData } from '../helpers/storage';
-import { getCarById } from '../helpers/carsData';
+import { getCarById, getCarThemeColor } from '../helpers/carsData';
 import { playEffect } from '../helpers/SoundManager';
 import CarSprite from '../components/CarSprite';
 
 const hexToRgba = (hex, opacity) => {
-  if (!hex || typeof hex !== 'string') return `rgba(0, 229, 255, ${opacity})`;
+  if (!hex || typeof hex !== 'string') return `rgba(0, 168, 255, ${opacity})`;
   let cleanHex = hex.replace('#', '');
   if (cleanHex.length === 3) {
     cleanHex = cleanHex.split('').map(c => c + c).join('');
   }
-  const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
-  const g = parseInt(cleanHex.substring(2, 4), 16) || 229;
-  const b = parseInt(cleanHex.substring(4, 6), 16) || 255;
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  const validR = isNaN(r) ? 0 : r;
+  const validG = isNaN(g) ? 168 : g;
+  const validB = isNaN(b) ? 255 : b;
+  return `rgba(${validR}, ${validG}, ${validB}, ${opacity})`;
 };
 
 const HomeScreen = ({ navigation }) => {
@@ -94,17 +97,17 @@ const HomeScreen = ({ navigation }) => {
     };
   }, [pulsePlayAnim, glowAnim]);
 
+  // Initial load on mount
+  useEffect(() => {
+    loadAllGameData().then(data => {
+      if (data) setGameData(data);
+    });
+  }, []);
+
   const activeCar = getCarById(gameData.selectedCar);
 
-  // Derive dynamic theme color matching the selected car (Cyan/Blue for Viper, Red for Apex, Yellow for Thunder)
-  const carThemeColor =
-    activeCar?.colors?.body &&
-    activeCar.colors.body !== '#FFFFFF' &&
-    activeCar.colors.body !== '#1C1E24'
-      ? activeCar.colors.body
-      : activeCar?.colors?.stripes && activeCar.colors.stripes !== '#FFFFFF'
-      ? activeCar.colors.stripes
-      : colors.primaryNeon;
+  // Derive dynamic theme color matching the selected car (Electric Blue for Viper, Hot Red for Apex, Gold for Thunder)
+  const carThemeColor = getCarThemeColor(activeCar);
 
   const handleNav = (screenName, params) => {
     playEffect('button');
@@ -172,22 +175,22 @@ const HomeScreen = ({ navigation }) => {
             <View
               style={[
                 styles.auraOuter,
-                { backgroundColor: hexToRgba(carThemeColor, 0.08) },
+                { backgroundColor: hexToRgba(carThemeColor, 0.12) },
               ]}
             />
             {/* Tier 2: Radiant mid diffusion aura */}
             <View
               style={[
                 styles.auraMid,
-                { backgroundColor: hexToRgba(carThemeColor, 0.18) },
+                { backgroundColor: hexToRgba(carThemeColor, 0.25) },
               ]}
             />
-            {/* Tier 3: Intense core underglow */}
+            {/* Tier 3: Intense core underglow / elevation pedestal */}
             <View
               style={[
                 styles.auraCore,
                 {
-                  backgroundColor: hexToRgba(carThemeColor, 0.32),
+                  backgroundColor: hexToRgba(carThemeColor, 0.45),
                   shadowColor: carThemeColor,
                 },
               ]}
@@ -196,7 +199,10 @@ const HomeScreen = ({ navigation }) => {
             <View
               style={[
                 styles.auraGroundReflection,
-                { backgroundColor: hexToRgba(carThemeColor, 0.55) },
+                {
+                  backgroundColor: hexToRgba(carThemeColor, 0.75),
+                  shadowColor: carThemeColor,
+                },
               ]}
             />
           </Animated.View>

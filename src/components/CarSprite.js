@@ -35,7 +35,7 @@ const CarSprite = ({
     );
   }
 
-  const isTruck = vehicleType === 'truck';
+  const isCommercial = vehicleType === 'truck' || vehicleType === 'bus' || vehicleType === 'van';
 
   return (
     <View style={[styles.container, { width, height }]}>
@@ -101,8 +101,8 @@ const CarSprite = ({
         {/* Rear Windshield Glass */}
         <View style={styles.rearGlass} />
 
-        {/* Rear Spoiler / Wing (for Sports cars) */}
-        {!isTruck ? (
+        {/* Rear Spoiler / Wing (for Sports cars) vs Cargo Bed (for Trucks/Vans/Buses) */}
+        {!isCommercial ? (
           <View style={[styles.spoilerWing, { backgroundColor: stripeColor }]}>
             <View style={styles.spoilerMountLeft} />
             <View style={styles.spoilerMountRight} />

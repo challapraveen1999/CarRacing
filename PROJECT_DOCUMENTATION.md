@@ -140,6 +140,14 @@ d:\CarRacing/
   - Holding **BRAKE (🛑)** applies smooth deceleration down to $120\text{ km/h}$.
   - Distance accumulates as $\text{distance} += \text{speed} \times \delta \times 0.28$.
   - Highway stripes, obstacles, powerups, and coins scroll downwards synchronously with the player's moving speed.
+* **Drive Mode Sound Isolation**:
+  - Continuous engine loops (`car_engine2.mp3`) and background racing music (`racing.mp3`) play **only when the player is actively in Drive Mode**.
+  - When the user hits the in-app Back button (`‹`), Settings button (`⚙️`), Pause button (`⏸`), or triggers Android hardware/gesture back navigation, the game immediately suspends drive mode, kills any pending countdown timers, and mutes all driving sounds.
+* **In-Game Pause & Back Popup Modal**:
+  - Intercepts in-app and system back events and presents the **GAME PAUSED** modal directly over the track without losing state:
+    1. **▶ CONTINUE**: Resumes Drive Mode, re-engages the engine loop, and continues the race.
+    2. **🔄 RESTART**: Resets the current run's distance, score, and traffic, running a clean 3-2-1-GO sequence.
+    3. **🏠 BACK TO HOME**: Atomically records earned coins and career records, terminates all sound channels, and safely navigates to the Home Screen.
 
 ### 5.2. Collision Detection & Safe Mode Immunity (`src/helpers/gameLogic.js`)
 * **Axis-Aligned Bounding Box (AABB)**:
@@ -148,9 +156,11 @@ d:\CarRacing/
   - When Safe Mode is active (`state.shield === true` or `activeShield === true`):
     - Vehicle collisions inflict **0 HP damage** (`continue;`).
     - The colliding traffic obstacle is instantly deflected and removed from the lane.
-    - Player receives a **+50 bonus score**.
-    - Safe Mode lasts for a full **15 seconds** with a live countdown pill on the HUD (`🛡️ SAFE MODE (15s)`).
+    - Player receives a **+100 bonus score** and $+15\%$ Nitro refill.
+    - Safe Mode lasts for strictly **10 seconds** (`POWERUPS.SHIELD.duration = 10`) with a live countdown pill on the HUD (`🛡️ SAFE MODE (10s)`).
     - Upon expiration, an automatic **2.5-second invulnerability recovery window** (`state.invulnerableTimer = 2.5`) shields the player against immediate damage.
+    - **Alternating Ejection Physics**: Rammed vehicles alternate strictly between flinging to the **LEFT ⬅️** on hit 1, **RIGHT ➡️** on hit 2, **LEFT ⬅️** on hit 3, etc.
+    - **Silent Lane Switching**: Lane shifts are completely silent (`playDash` removed from `shiftLane`).
 
 ### 5.3. Coin Economy & Zero-Backend Storage (`src/helpers/storage.js`)
 * **Universal AsyncStorage Adapter**:
@@ -195,6 +205,19 @@ All 6 supercar models feature tailored handling, acceleration, top speeds, armor
   - **Vehicle Badge**: Upper vehicle class badge border and text reflect the active car color.
   - **Play Button**: The animated pulsing "⚡ RACE NOW" button adopts the active vehicle's radiant color.
 
+### 5.7. Safe Zone Ram & Airborne Track Jump Physics (`src/screens/GameScreen.js`)
+* **Airborne Catapult Launch**:
+  When the player is in Safe Zone (Safe Mode active) and impacts any traffic vehicle (Sports Car, Delivery Van, Cargo Truck, Transit Bus):
+  - **3D Parabolic Elevation Arc**: The hit vehicle scales up to $1.7\times$ at mid-air apex, casting a dynamic 3D ground projection shadow beneath it.
+  - **Arcade Barrel Roll & Spin**: Rotates at $\pm 560^\circ/\text{sec}$ while catapulting diagonally across the highway.
+  - **Ejection from Track**: Clears the highway guardrails and flies completely out of the track and off-screen.
+  - **Player Car Kinetic Hop**: Front suspension performs a vertical shockwave hop ($1.18\times$) accompanied by a kinetic cyan forcefield burst ring.
+  - **Takedown Rewards**: Awards $+100\text{ bonus points}$ and $+15\%$ instant Nitro fuel refill with dynamic HUD notification.
+
+### 5.8. High-Contrast White & Black Track Dividers & Curbs
+* **Alternating Monochrome Rumble Curbs**: Road borders feature alternating pure white (`#FFFFFF`) and deep carbon black (`#0D1117`) segments with high-contrast borders replacing generic red stripes.
+* **Crisp Road Dividers**: Pure white dashed lane dividers with soft illumination contrast sharply against dark asphalt.
+
 ---
 
 ## 6. Game Modes
@@ -208,7 +231,7 @@ All 6 supercar models feature tailored handling, acceleration, top speeds, armor
 
 ## 7. Powerup System
 
-* **🛡️ Safe Mode Shield**: 15-second complete immunity to traffic collisions; deflects traffic with 0 HP damage and awards +50 pts.
+* **🛡️ Safe Mode Shield**: 10-second complete immunity to traffic collisions; catapults traffic out of the track (alternating Left/Right) with 0 HP damage, awards +100 pts, and replenishes +15% Nitro.
 * **🧲 Coin Magnet**: 8-second magnetic field pulling all coins within a 180px radius directly into the car.
 * **⚡ Nitro Tank**: Instantly restores the vehicle's dash booster gauge to 100%.
 * **❤️ Health Repair Pack**: Restores +35 HP to the car's structural health bar.
