@@ -79,7 +79,7 @@ android {
 
     namespace "com.awesome"
     defaultConfig {
-        applicationId "com.turborush.racing"
+        applicationId "com.awesome"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

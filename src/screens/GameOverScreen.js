@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,12 @@ const GameOverScreen = ({ navigation, route }) => {
     isNewHighScore = false,
     mode = 'endless',
   } = route.params || {};
+
+  useEffect(() => {
+    if (isNewHighScore) {
+      playEffect('unlock');
+    }
+  }, [isNewHighScore]);
 
   const handlePlayAgain = () => {
     playEffect('button');

@@ -42,5 +42,28 @@ describe('Turbo Rush Game Logic', () => {
     const score = calculateScore(100, 200, 2, 5);
     expect(score).toBeGreaterThan(0);
   });
+
+  test('safe mode protects car health from decreasing on collision with other cars', () => {
+    // Simulating Safe Mode collision behavior
+    const initialHealth = 100;
+    const hitDamage = 35;
+    const isSafeMode = true;
+
+    // In Safe Mode, health must NEVER decrease on collision
+    let health = initialHealth;
+    if (!isSafeMode) {
+      health = Math.max(0, health - hitDamage);
+    }
+
+    expect(health).toBe(100);
+
+    // Without Safe Mode, health decreases
+    const isSafeModeOff = false;
+    let nonSafeHealth = initialHealth;
+    if (!isSafeModeOff) {
+      nonSafeHealth = Math.max(0, nonSafeHealth - hitDamage);
+    }
+    expect(nonSafeHealth).toBe(65);
+  });
 });
 

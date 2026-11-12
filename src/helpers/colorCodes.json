@@ -23,6 +23,7 @@
   "overlay": "rgba(13, 17, 23, 0.88)",
   "overlayLight": "rgba(13, 17, 23, 0.5)",
   "border": "#30363D",
-  "borderLight": "#3F4756"
+  "borderLight": "#3F4756",
+  "White": "#FFFFFF",
+  "Black": "#000000"
 }
-

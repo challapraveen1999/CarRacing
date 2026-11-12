@@ -14,6 +14,8 @@ import {
   setMusicEnabled,
   setEffectsEnabled,
   setVibrationEnabled,
+  setMusicVolume,
+  setEffectsVolume,
 } from '../helpers/SoundManager';
 
 const SplashScreen = ({ navigation }) => {
@@ -71,6 +73,8 @@ const SplashScreen = ({ navigation }) => {
         setMusicEnabled(gameData.musicEnabled ?? true);
         setEffectsEnabled(gameData.effectsEnabled ?? true);
         setVibrationEnabled(gameData.vibrationEnabled ?? true);
+        setMusicVolume(gameData.musicVolume ?? 0.7);
+        setEffectsVolume(gameData.effectsVolume ?? 0.8);
       }
       const elapsed = Date.now() - startTime;
       const minDelay = 2400; // Allow splash animation to finish nicely

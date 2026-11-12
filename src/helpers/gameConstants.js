@@ -73,7 +73,7 @@ export const OBSTACLE_CONFIG = {
 
 export const COIN_CONFIG = {
   SIZE: 28,
-  VALUE: 10,
+  VALUE: 100, // 100 coins per pickup matching voiceover/notification
   SPAWN_INTERVAL_MS: 2000,
 };
 
@@ -81,8 +81,8 @@ export const POWERUPS = {
   SHIELD: {
     id: 'shield',
     icon: '🛡️',
-    title: 'Shield',
-    duration: 10, // seconds
+    title: 'Safe Mode',
+    duration: 15, // seconds - extended safe zone
     color: '#00E5FF',
   },
   MAGNET: {

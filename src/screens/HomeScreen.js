@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import colors from '../helpers/colorCodes.json';
 import { loadAllGameData } from '../helpers/storage';
 import { getCarById } from '../helpers/carsData';
-import { playEffect, playMusic, pauseMusic } from '../helpers/SoundManager';
+import { playEffect } from '../helpers/SoundManager';
 import CarSprite from '../components/CarSprite';
+
+const hexToRgba = (hex, opacity) => {
+  if (!hex || typeof hex !== 'string') return `rgba(0, 229, 255, ${opacity})`;
+  let cleanHex = hex.replace('#', '');
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map(c => c + c).join('');
+  }
+  const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
+  const g = parseInt(cleanHex.substring(2, 4), 16) || 229;
+  const b = parseInt(cleanHex.substring(4, 6), 16) || 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
 
 const HomeScreen = ({ navigation }) => {
   const [gameData, setGameData] = useState({
@@ -25,6 +37,7 @@ const HomeScreen = ({ navigation }) => {
   });
 
   const pulsePlayAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(1)).current;
 
   // Refresh saved stats every time Home screen is focused
   useFocusEffect(
@@ -35,20 +48,18 @@ const HomeScreen = ({ navigation }) => {
           setGameData(data);
         }
       });
-      playMusic();
       return () => {
         isMounted = false;
-        pauseMusic();
       };
     }, []),
   );
 
-  // Pulse animation for the main PLAY button
-  React.useEffect(() => {
+  // Pulse animation for the main PLAY button & radiant neon underglow
+  useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulsePlayAnim, {
-          toValue: 1.04,
+          toValue: 1.03,
           duration: 900,
           useNativeDriver: true,
         }),
@@ -59,11 +70,41 @@ const HomeScreen = ({ navigation }) => {
         }),
       ]),
     );
+
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1.14,
+          duration: 1300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.94,
+          duration: 1300,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
     pulse.start();
-    return () => pulse.stop();
-  }, [pulsePlayAnim]);
+    glow.start();
+    return () => {
+      pulse.stop();
+      glow.stop();
+    };
+  }, [pulsePlayAnim, glowAnim]);
 
   const activeCar = getCarById(gameData.selectedCar);
+
+  // Derive dynamic theme color matching the selected car (Cyan/Blue for Viper, Red for Apex, Yellow for Thunder)
+  const carThemeColor =
+    activeCar?.colors?.body &&
+    activeCar.colors.body !== '#FFFFFF' &&
+    activeCar.colors.body !== '#1C1E24'
+      ? activeCar.colors.body
+      : activeCar?.colors?.stripes && activeCar.colors.stripes !== '#FFFFFF'
+      ? activeCar.colors.stripes
+      : colors.primaryNeon;
 
   const handleNav = (screenName, params) => {
     playEffect('button');
@@ -78,7 +119,7 @@ const HomeScreen = ({ navigation }) => {
       <View style={styles.header}>
         <View style={styles.coinBadge}>
           <Text style={styles.coinIcon}>🪙</Text>
-          <Text style={styles.coinText}>{gameData.totalCoins.toLocaleString()}</Text>
+          <Text style={styles.coinText}>{Number(gameData.totalCoins || 0).toLocaleString()}</Text>
         </View>
 
         <TouchableOpacity
@@ -91,98 +132,116 @@ const HomeScreen = ({ navigation }) => {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        bounces={false}>
         {/* Logo Banner */}
         <View style={styles.bannerContainer}>
-          <Text style={styles.titleTurbo}>TURBO <Text style={styles.titleRush}>RUSH</Text></Text>
+          <Text style={styles.titleTurbo}>TURBO <Text style={[styles.titleRush, { color: carThemeColor }]}>RUSH</Text></Text>
           <Text style={styles.subtitle}>HIGHWAY SPEED DEMON</Text>
         </View>
 
-        {/* Selected Car Showcase Card */}
+        {/* HERO CAR: Centered with dynamic neon underglow matching active vehicle color */}
         <TouchableOpacity
-          style={styles.carShowcaseCard}
-          activeOpacity={0.85}
+          style={styles.heroCarContainer}
+          activeOpacity={0.88}
           onPress={() => handleNav('Garage')}>
-          <View style={styles.carShowcaseHeader}>
-            <View>
-              <Text style={styles.carCategoryText}>CURRENT VEHICLE</Text>
-              <Text style={styles.carNameText}>{activeCar.name}</Text>
-            </View>
-            <View style={styles.garagePill}>
-              <Text style={styles.garagePillText}>GARAGE ›</Text>
-            </View>
+          {/* Active Car Name Badge */}
+          <View style={[styles.activeVehicleBadge, { borderColor: carThemeColor }]}>
+            <Text style={styles.activeVehicleBadgeIcon}>{activeCar?.icon || '🏎️'}</Text>
+            <Text style={[styles.activeVehicleBadgeText, { color: carThemeColor }]}>
+              {activeCar?.name?.toUpperCase() || 'APEX TURBO'}
+            </Text>
           </View>
 
-          {/* Stylized Car Graphic Preview */}
-          <View style={styles.carGraphicWrapper}>
-            <CarSprite
-              width={76}
-              height={140}
-              bodyColor={activeCar.colors.body}
-              stripeColor={activeCar.colors.stripes}
-              roofColor={activeCar.colors.roof}
+          {/* Subtle Road Stripes behind Car */}
+          <View style={styles.subtleRoadTrack} pointerEvents="none">
+            <View style={styles.subtleRoadStripe} />
+            <View style={styles.subtleRoadStripe} />
+            <View style={styles.subtleRoadStripe} />
+            <View style={styles.subtleRoadStripe} />
+          </View>
+
+          {/* Dynamic Multi-Tier Neon Elevation & Underglow matching active vehicle color */}
+          <Animated.View
+            style={[
+              styles.neonAuraContainer,
+              { transform: [{ scale: glowAnim }] },
+            ]}
+            pointerEvents="none">
+            {/* Tier 1: Wide diffused outer halo */}
+            <View
+              style={[
+                styles.auraOuter,
+                { backgroundColor: hexToRgba(carThemeColor, 0.08) },
+              ]}
             />
-          </View>
+            {/* Tier 2: Radiant mid diffusion aura */}
+            <View
+              style={[
+                styles.auraMid,
+                { backgroundColor: hexToRgba(carThemeColor, 0.18) },
+              ]}
+            />
+            {/* Tier 3: Intense core underglow */}
+            <View
+              style={[
+                styles.auraCore,
+                {
+                  backgroundColor: hexToRgba(carThemeColor, 0.32),
+                  shadowColor: carThemeColor,
+                },
+              ]}
+            />
+            {/* Tier 4: Ground tire reflection bar directly under vehicle wheels */}
+            <View
+              style={[
+                styles.auraGroundReflection,
+                { backgroundColor: hexToRgba(carThemeColor, 0.55) },
+              ]}
+            />
+          </Animated.View>
 
-          {/* Quick Stat Bars */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>SPEED</Text>
-              <View style={styles.statBarBg}>
-                <View
-                  style={[
-                    styles.statBarFill,
-                    {
-                      width: `${activeCar.stats.speed}%`,
-                      backgroundColor: colors.primaryNeon,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>HANDLING</Text>
-              <View style={styles.statBarBg}>
-                <View
-                  style={[
-                    styles.statBarFill,
-                    {
-                      width: `${activeCar.stats.handling}%`,
-                      backgroundColor: colors.secondary,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
+          {/* Supercar Hero Sprite */}
+          <CarSprite
+            width={92}
+            height={170}
+            image={activeCar?.image}
+            bodyColor={activeCar?.colors?.body}
+            stripeColor={activeCar?.colors?.stripes}
+            roofColor={activeCar?.colors?.roof}
+            vehicleType="sports"
+          />
         </TouchableOpacity>
 
-        {/* Player Records Grid */}
-        <View style={styles.recordsGrid}>
-          <View style={styles.recordCard}>
-            <Text style={styles.recordLabel}>BEST SCORE</Text>
-            <Text style={styles.recordValue}>
-              {gameData.bestScore.toLocaleString()}
+        {/* Career Records Strip (Best Score & Longest Run) */}
+        <View style={styles.careerRecordsStrip}>
+          <View style={styles.careerRecordBox}>
+            <Text style={styles.careerRecordLabel}>BEST SCORE</Text>
+            <Text style={styles.careerRecordValue}>
+              {Number(gameData.bestScore || 0).toLocaleString()} <Text style={styles.careerRecordUnit}>PTS</Text>
             </Text>
-            <Text style={styles.recordSubtext}>PTS</Text>
           </View>
-
-          <View style={styles.recordCard}>
-            <Text style={styles.recordLabel}>LONGEST RUN</Text>
-            <Text style={styles.recordValue}>
-              {gameData.bestDistance.toLocaleString()}
+          <View style={styles.careerRecordDivider} />
+          <View style={styles.careerRecordBox}>
+            <Text style={styles.careerRecordLabel}>LONGEST RUN</Text>
+            <Text style={styles.careerRecordValue}>
+              {Number(gameData.bestDistance || 0).toLocaleString()} <Text style={styles.careerRecordUnit}>M</Text>
             </Text>
-            <Text style={styles.recordSubtext}>METERS</Text>
           </View>
         </View>
 
-        {/* Action Buttons */}
+        {/* Action Buttons: ⚡ RACE NOW, MODES & GARAGE */}
         <View style={styles.actionsContainer}>
           {/* Main Play Now Button */}
           <Animated.View style={{ transform: [{ scale: pulsePlayAnim }] }}>
             <TouchableOpacity
-              style={styles.playButton}
+              style={[
+                styles.playButton,
+                {
+                  backgroundColor: carThemeColor,
+                  shadowColor: carThemeColor,
+                },
+              ]}
               activeOpacity={0.85}
               onPress={() => handleNav('Game', { mode: 'endless' })}>
               <Text style={styles.playButtonText}>⚡ RACE NOW</Text>
@@ -222,14 +281,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     paddingTop: 16,
     paddingBottom: 8,
   },
   coinBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundCard,
+    backgroundColor: 'rgba(22, 27, 34, 0.85)',
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
@@ -249,7 +308,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: colors.backgroundCard,
+    backgroundColor: 'rgba(22, 27, 34, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -259,15 +318,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 36,
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    paddingBottom: 32,
   },
   bannerContainer: {
     alignItems: 'center',
-    marginVertical: 18,
+    marginTop: 6,
+    marginBottom: 10,
   },
   titleTurbo: {
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: '900',
     fontStyle: 'italic',
     color: colors.textPrimary,
@@ -277,133 +340,135 @@ const styles = StyleSheet.create({
     color: colors.primaryNeon,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.secondary,
-    letterSpacing: 4,
-    marginTop: 4,
-  },
-  carShowcaseCard: {
-    backgroundColor: colors.backgroundCard,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 20,
-  },
-  carShowcaseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  carCategoryText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    letterSpacing: 1.5,
-  },
-  carNameText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  garagePill: {
-    backgroundColor: colors.backgroundSurface,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  garagePillText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.secondary,
+    letterSpacing: 3.5,
+    marginTop: 3,
   },
-  carGraphicWrapper: {
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  carBodyOutline: {
-    width: 90,
-    height: 120,
-    borderRadius: 18,
-    borderWidth: 3,
+  heroCarContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 8,
+    minHeight: 260,
+    marginVertical: 18,
   },
-  carBigEmoji: {
-    fontSize: 48,
+  activeVehicleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(22, 27, 34, 0.9)',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  carStripeDetail: {
+  activeVehicleBadgeIcon: {
+    fontSize: 13,
+    marginRight: 6,
+  },
+  activeVehicleBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  subtleRoadTrack: {
     position: 'absolute',
-    bottom: 8,
-    width: 24,
-    height: 4,
+    top: -24,
+    bottom: -24,
+    width: 6,
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    opacity: 0.22,
+  },
+  subtleRoadStripe: {
+    width: 4,
+    height: 32,
+    backgroundColor: '#FFE600',
     borderRadius: 2,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  statItem: {
-    flex: 0.48,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    marginBottom: 5,
-    letterSpacing: 1,
-  },
-  statBarBg: {
-    height: 6,
-    backgroundColor: colors.backgroundSurface,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  statBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  recordsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  recordCard: {
-    flex: 0.48,
-    backgroundColor: colors.backgroundCard,
-    padding: 14,
-    borderRadius: 14,
+  neonAuraContainer: {
+    position: 'absolute',
     alignItems: 'center',
+    justifyContent: 'center',
+    width: 240,
+    height: 290,
+  },
+  auraOuter: {
+    position: 'absolute',
+    width: 220,
+    height: 270,
+    borderRadius: 110,
+  },
+  auraMid: {
+    position: 'absolute',
+    width: 170,
+    height: 220,
+    borderRadius: 85,
+  },
+  auraCore: {
+    position: 'absolute',
+    width: 120,
+    height: 165,
+    borderRadius: 60,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 28,
+  },
+  auraGroundReflection: {
+    position: 'absolute',
+    bottom: 24,
+    width: 86,
+    height: 12,
+    borderRadius: 6,
+  },
+  careerRecordsStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(22, 27, 34, 0.85)',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(48, 54, 61, 0.7)',
+    marginBottom: 14,
   },
-  recordLabel: {
-    fontSize: 10,
-    fontWeight: '700',
+  careerRecordBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  careerRecordLabel: {
+    fontSize: 9,
+    fontWeight: '800',
     color: colors.textSecondary,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    marginBottom: 2,
   },
-  recordValue: {
-    fontSize: 22,
+  careerRecordValue: {
+    fontSize: 16,
     fontWeight: '900',
     color: colors.textPrimary,
-    marginVertical: 4,
   },
-  recordSubtext: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 1,
+  careerRecordUnit: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: colors.secondary,
+    letterSpacing: 0.5,
+  },
+  careerRecordDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: 'rgba(48, 54, 61, 0.8)',
+    marginHorizontal: 8,
   },
   actionsContainer: {
-    marginTop: 4,
+    width: '100%',
+    marginTop: 'auto',
   },
   playButton: {
     backgroundColor: colors.primaryNeon,
@@ -412,9 +477,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: colors.primaryNeon,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOpacity: 0.65,
+    shadowRadius: 18,
+    elevation: 12,
     marginBottom: 14,
   },
   playButtonText: {
@@ -433,7 +498,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.backgroundCard,
+    backgroundColor: 'rgba(22, 27, 34, 0.95)',
     paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
@@ -444,7 +509,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.backgroundCard,
+    backgroundColor: 'rgba(22, 27, 34, 0.95)',
     paddingVertical: 14,
     borderRadius: 14,
     borderWidth: 1,
@@ -463,4 +528,3 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
-

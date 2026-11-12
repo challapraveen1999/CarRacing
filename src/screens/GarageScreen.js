@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,39 +6,66 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import colors from '../helpers/colorCodes.json';
 import { CARS } from '../helpers/carsData';
-import { getItem, setSelectedCar as saveSelectedCar, unlockCar as purchaseCar } from '../helpers/storage';
+import {
+  loadAllGameData,
+  setSelectedCar as saveSelectedCar,
+  unlockCar as purchaseCar,
+} from '../helpers/storage';
 import { STORAGE_KEYS } from '../helpers/gameConstants';
 import { playEffect } from '../helpers/SoundManager';
 import CarSprite from '../components/CarSprite';
+import CustomModal from '../components/CustomModal';
 
 const GarageScreen = ({ navigation }) => {
   const [totalCoins, setTotalCoins] = useState(0);
+  const [bestScore, setBestScore] = useState(0);
+  const [longestRun, setLongestRun] = useState(0);
   const [unlockedCars, setUnlockedCars] = useState(['car_01']);
   const [selectedCarId, setSelectedCarId] = useState('car_01');
   const [activeCarIndex, setActiveCarIndex] = useState(0);
-
-  useEffect(() => {
-    loadGarageData();
-  }, []);
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    icon: '🏎️',
+    type: 'default',
+    confirmText: 'OK',
+  });
 
   const loadGarageData = async () => {
-    const coins = await getItem(STORAGE_KEYS.TOTAL_COINS, 0);
-    const unlocked = await getItem(STORAGE_KEYS.UNLOCKED_CARS, ['car_01']);
-    const selected = await getItem(STORAGE_KEYS.SELECTED_CAR, 'car_01');
+    try {
+      const data = await loadAllGameData();
+      const coins = Number(data[STORAGE_KEYS.TOTAL_COINS] ?? 0);
+      const unlocked = data[STORAGE_KEYS.UNLOCKED_CARS] || ['car_01'];
+      const selected = data[STORAGE_KEYS.SELECTED_CAR] || 'car_01';
+      const bScore = Number(data[STORAGE_KEYS.BEST_SCORE] ?? 0);
+      const bDist = Number(data[STORAGE_KEYS.BEST_DISTANCE] ?? 0);
 
-    setTotalCoins(coins);
-    setUnlockedCars(unlocked);
-    setSelectedCarId(selected);
+      setTotalCoins(coins);
+      setUnlockedCars(unlocked);
+      setSelectedCarId(selected);
+      setBestScore(bScore);
+      setLongestRun(bDist);
 
-    const initialIdx = CARS.findIndex(c => c.id === selected);
-    if (initialIdx >= 0) {
-      setActiveCarIndex(initialIdx);
+      const initialIdx = CARS.findIndex(c => c.id === selected);
+      if (initialIdx >= 0) {
+        setActiveCarIndex(initialIdx);
+      }
+    } catch (e) {
+      console.warn('Error loading garage data:', e);
     }
   };
+
+  // Reload latest coins, career records and selected car every time Garage is viewed
+  useFocusEffect(
+    useCallback(() => {
+      loadGarageData();
+    }, []),
+  );
 
   const currentCar = CARS[activeCarIndex] || CARS[0];
   const isCarUnlocked = unlockedCars.includes(currentCar.id);
@@ -53,7 +80,14 @@ const GarageScreen = ({ navigation }) => {
   const handleBuyCar = async () => {
     if (totalCoins < currentCar.price) {
       playEffect('button');
-      Alert.alert('Need More Coins', `You need ${currentCar.price - totalCoins} more coins to unlock ${currentCar.name}.`);
+      setModalConfig({
+        visible: true,
+        title: 'NEED MORE COINS',
+        message: `You need ${(currentCar.price - totalCoins).toLocaleString()} more coins to unlock ${currentCar.name}. Keep racing to collect coins!`,
+        icon: '🪙',
+        type: 'warning',
+        confirmText: 'GOT IT',
+      });
       return;
     }
 
@@ -63,7 +97,15 @@ const GarageScreen = ({ navigation }) => {
       setUnlockedCars(result.unlockedCars);
       setTotalCoins(result.totalCoins);
       setSelectedCarId(currentCar.id);
-      Alert.alert('Car Unlocked!', `You have unlocked ${currentCar.name}! It is now your selected vehicle.`);
+      await saveSelectedCar(currentCar.id);
+      setModalConfig({
+        visible: true,
+        title: 'CAR UNLOCKED!',
+        message: `You unlocked ${currentCar.name}! It is now your active vehicle and ready to race.`,
+        icon: '⚡',
+        type: 'success',
+        confirmText: "LET'S RACE!",
+      });
     }
   };
 
@@ -84,11 +126,38 @@ const GarageScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>GARAGE</Text>
         <View style={styles.coinBadge}>
           <Text style={styles.coinIcon}>🪙</Text>
-          <Text style={styles.coinText}>{totalCoins.toLocaleString()}</Text>
+          <Text style={styles.coinText}>{(totalCoins || 0).toLocaleString()}</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Career Records & Coin Balance Strip */}
+        <View style={styles.walletBar}>
+          <View style={styles.walletItemMain}>
+            <Text style={styles.walletLabel}>COIN BALANCE</Text>
+            <View style={styles.walletRow}>
+              <Text style={styles.walletCoinEmoji}>🪙</Text>
+              <Text style={styles.walletCoinNumber}>{(totalCoins || 0).toLocaleString()}</Text>
+            </View>
+          </View>
+
+          <View style={styles.walletDivider} />
+
+          <View style={styles.walletItem}>
+            <Text style={styles.walletLabel}>BEST SCORE</Text>
+            <Text style={styles.walletStatNumber}>{(bestScore || 0).toLocaleString()}</Text>
+            <Text style={styles.walletStatUnit}>PTS</Text>
+          </View>
+
+          <View style={styles.walletDivider} />
+
+          <View style={styles.walletItem}>
+            <Text style={styles.walletLabel}>LONGEST RUN</Text>
+            <Text style={styles.walletStatNumber}>{(longestRun || 0).toLocaleString()}</Text>
+            <Text style={styles.walletStatUnit}>M</Text>
+          </View>
+        </View>
+
         {/* Car Navigation Selector */}
         <View style={styles.carouselBar}>
           <TouchableOpacity
@@ -130,6 +199,7 @@ const GarageScreen = ({ navigation }) => {
             <CarSprite
               width={78}
               height={144}
+              image={currentCar?.image}
               bodyColor={currentCar.colors.body}
               stripeColor={currentCar.colors.stripes}
               roofColor={currentCar.colors.roof}
@@ -137,10 +207,25 @@ const GarageScreen = ({ navigation }) => {
             {!isCarUnlocked && (
               <View style={styles.lockedOverlay}>
                 <Text style={styles.lockIcon}>🔒</Text>
-                <Text style={styles.lockPriceText}>🪙 {currentCar.price}</Text>
+                <Text style={styles.lockPriceText}>🪙 {currentCar.price.toLocaleString()}</Text>
               </View>
             )}
           </View>
+
+          {/* Affordability notice for locked cars */}
+          {!isCarUnlocked && (
+            <View style={styles.affordabilityNotice}>
+              {totalCoins >= currentCar.price ? (
+                <Text style={styles.affordNoticeSuccess}>
+                  ✓ You have enough coins to unlock this car!
+                </Text>
+              ) : (
+                <Text style={styles.affordNoticeMissing}>
+                  🪙 Need {(currentCar.price - totalCoins).toLocaleString()} more coins
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Vehicle Performance Stats */}
@@ -199,7 +284,11 @@ const GarageScreen = ({ navigation }) => {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.actionButton, styles.unlockButton]}
+              style={[
+                styles.actionButton,
+                styles.unlockButton,
+                totalCoins < currentCar.price && styles.unlockButtonDisabled,
+              ]}
               activeOpacity={0.8}
               onPress={handleBuyCar}>
               <Text style={styles.actionButtonText}>
@@ -209,6 +298,17 @@ const GarageScreen = ({ navigation }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* In-Game Custom Modal */}
+      <CustomModal
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        icon={modalConfig.icon}
+        type={modalConfig.type}
+        confirmText={modalConfig.confirmText}
+        onConfirm={() => setModalConfig(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 };
@@ -424,6 +524,83 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 15,
     letterSpacing: 1.5,
+  },
+  unlockButtonDisabled: {
+    opacity: 0.65,
+  },
+  walletBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: colors.backgroundCard,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 8,
+  },
+  walletItemMain: {
+    alignItems: 'center',
+    flex: 1.2,
+  },
+  walletItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  walletLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  walletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  walletCoinEmoji: {
+    fontSize: 16,
+    marginRight: 4,
+  },
+  walletCoinNumber: {
+    color: colors.accent,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  walletDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+    marginHorizontal: 6,
+  },
+  walletStatNumber: {
+    color: colors.primaryNeon,
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  walletStatUnit: {
+    fontSize: 8,
+    color: colors.textSecondary,
+    fontWeight: '700',
+  },
+  affordabilityNotice: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundSurface,
+  },
+  affordNoticeSuccess: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  affordNoticeMissing: {
+    color: colors.accentOrange,
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
 

@@ -10,7 +10,7 @@ import colors from '../helpers/colorCodes.json';
 import { playEffect } from '../helpers/SoundManager';
 
 const PauseScreen = ({ navigation, route }) => {
-  const { onResume, onRestart } = route.params || {};
+  const { onResume, onRestart, onExit } = route.params || {};
 
   const handleResume = () => {
     playEffect('button');
@@ -24,8 +24,15 @@ const PauseScreen = ({ navigation, route }) => {
     navigation.goBack();
   };
 
-  const handleExit = () => {
+  const handleExit = async () => {
     playEffect('button');
+    if (onExit) {
+      try {
+        await onExit();
+      } catch (err) {
+        console.warn('Error during onExit:', err);
+      }
+    }
     navigation.navigate('Home');
   };
 

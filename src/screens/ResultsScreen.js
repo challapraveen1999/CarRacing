@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,10 @@ const ResultsScreen = ({ navigation, route }) => {
     coinsCollected = 0,
     mode = 'endless',
   } = route.params || {};
+
+  useEffect(() => {
+    playEffect('race_complete');
+  }, []);
 
   const basePoints = Math.floor(distance * 1.5);
   const coinBonus = coinsCollected * 20;

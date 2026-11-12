@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   Switch,
   ScrollView,
-  Alert,
   StatusBar,
 } from 'react-native';
 import colors from '../helpers/colorCodes.json';
 import { getItem, setItem, resetGameData } from '../helpers/storage';
 import { STORAGE_KEYS } from '../helpers/gameConstants';
+import CustomModal from '../components/CustomModal';
 import {
   setMusicEnabled,
   setEffectsEnabled,
@@ -22,7 +22,8 @@ import {
   playStartSound,
   playDash,
   playBrake,
-  playBlastSound,
+  playCollisionSound,
+  playHealthSound,
   playHonkSound,
   playCoinSound,
   playCoinVoice,
@@ -35,6 +36,17 @@ const SettingsScreen = ({ navigation }) => {
   const [vibration, setVibration] = useState(true);
   const [musicVol, setMusicVol] = useState(0.7);
   const [effectsVol, setEffectsVol] = useState(0.8);
+  const [activeTestSound, setActiveTestSound] = useState(null);
+  const [modalConfig, setModalConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    icon: '⚙️',
+    type: 'default',
+    confirmText: 'OK',
+    cancelText: null,
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     loadSettings();
@@ -96,33 +108,55 @@ const SettingsScreen = ({ navigation }) => {
     playEffect('button');
   };
 
+  const handleTestSound = (label, filename, soundFn) => {
+    try {
+      soundFn();
+      setActiveTestSound({ label, filename });
+      setTimeout(() => {
+        setActiveTestSound(prev => (prev?.label === label ? null : prev));
+      }, 1600);
+    } catch (e) {
+      console.warn('Error testing sound:', e);
+    }
+  };
+
   const handleResetProgress = () => {
     playEffect('button');
-    Alert.alert(
-      'Reset All Progress?',
-      'This will delete all unlocked cars, best scores, and coins. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            await resetGameData();
-            setMusic(true);
-            setEffects(true);
-            setVibration(true);
-            setMusicVol(0.7);
-            setEffectsVol(0.8);
-            setMusicEnabled(true);
-            setEffectsEnabled(true);
-            setVibrationEnabled(true);
-            setMusicVolume(0.7);
-            setEffectsVolume(0.8);
-            Alert.alert('Reset Complete', 'Your game progress has been reset to defaults.');
-          },
-        },
-      ],
-    );
+    setModalConfig({
+      visible: true,
+      title: 'RESET ALL PROGRESS?',
+      message: 'This will delete all unlocked cars, best scores, and coins. This action cannot be undone.',
+      icon: '⚠️',
+      type: 'danger',
+      confirmText: 'YES, RESET',
+      cancelText: 'CANCEL',
+      onConfirm: async () => {
+        await resetGameData();
+        setMusic(true);
+        setEffects(true);
+        setVibration(true);
+        setMusicVol(0.7);
+        setEffectsVol(0.8);
+        setMusicEnabled(true);
+        setEffectsEnabled(true);
+        setVibrationEnabled(true);
+        setMusicVolume(0.7);
+        setEffectsVolume(0.8);
+
+        setTimeout(() => {
+          setModalConfig({
+            visible: true,
+            title: 'RESET COMPLETE',
+            message: 'All game data, unlocked cars, and preferences have been restored to defaults.',
+            icon: '✅',
+            type: 'success',
+            confirmText: 'DONE',
+            cancelText: null,
+            onConfirm: () => setModalConfig(prev => ({ ...prev, visible: false })),
+          });
+        }, 150);
+      },
+    });
   };
 
   return (
@@ -256,13 +290,80 @@ const SettingsScreen = ({ navigation }) => {
         {/* Sound Effects Preview & Test Section */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionHeader}>SOUND EFFECTS TEST & PREVIEW</Text>
-          <Text style={styles.previewSubtitle}>Tap any sound effect to test playback on your device:</Text>
+          <Text style={styles.previewSubtitle}>Tap any sound effect to test playback live on your device:</Text>
 
+          {/* Active Sound Playback Indicator */}
+          {activeTestSound && (
+            <View style={styles.activeTestBanner}>
+              <Text style={styles.activeTestIcon}>🔊</Text>
+              <Text style={styles.activeTestText}>
+                PLAYING: {activeTestSound.label.toUpperCase()} ({activeTestSound.filename})
+              </Text>
+            </View>
+          )}
+
+          {/* User Requested Primary Audio Tests */}
+          <Text style={styles.testCategoryHeader}>CORE GAME SOUNDS</Text>
+          <View style={styles.primaryTestColumn}>
+            {/* 1. Coin Collecting Sound */}
+            <TouchableOpacity
+              style={[styles.primaryTestCard, { borderColor: '#FFE600' }]}
+              activeOpacity={0.7}
+              onPress={() => handleTestSound('Coin Collecting', 'coin_collecting.mp3', playCoinSound)}>
+              <View style={styles.testCardLeft}>
+                <Text style={styles.primaryTestIcon}>🪙</Text>
+                <View>
+                  <Text style={[styles.primaryTestTitle, { color: '#FFE600' }]}>Coin Collecting</Text>
+                  <Text style={styles.primaryTestFile}>File: coin_collecting.mp3</Text>
+                </View>
+              </View>
+              <View style={[styles.testPlayBadge, { backgroundColor: 'rgba(255, 230, 0, 0.2)' }]}>
+                <Text style={[styles.testPlayBadgeText, { color: '#FFE600' }]}>TEST 🔊</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 2. Car Crash / Collision Sound (Car attacking another car) */}
+            <TouchableOpacity
+              style={[styles.primaryTestCard, { borderColor: colors.danger }]}
+              activeOpacity={0.7}
+              onPress={() => handleTestSound('Car Crash / Collision', 'blast.mp3', playCollisionSound)}>
+              <View style={styles.testCardLeft}>
+                <Text style={styles.primaryTestIcon}>💥</Text>
+                <View>
+                  <Text style={[styles.primaryTestTitle, { color: colors.danger }]}>Car Collision / Crash</Text>
+                  <Text style={styles.primaryTestFile}>Car hitting car • File: blast.mp3</Text>
+                </View>
+              </View>
+              <View style={[styles.testPlayBadge, { backgroundColor: 'rgba(255, 23, 68, 0.2)' }]}>
+                <Text style={[styles.testPlayBadgeText, { color: colors.danger }]}>TEST 🔊</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 3. Health Case Collecting Sound */}
+            <TouchableOpacity
+              style={[styles.primaryTestCard, { borderColor: '#00E676' }]}
+              activeOpacity={0.7}
+              onPress={() => handleTestSound('Health Pack Collect', 'car_dash.mp3', playHealthSound)}>
+              <View style={styles.testCardLeft}>
+                <Text style={styles.primaryTestIcon}>❤️</Text>
+                <View>
+                  <Text style={[styles.primaryTestTitle, { color: '#00E676' }]}>Health Case Collect</Text>
+                  <Text style={styles.primaryTestFile}>Repair Pack • File: car_dash.mp3</Text>
+                </View>
+              </View>
+              <View style={[styles.testPlayBadge, { backgroundColor: 'rgba(0, 230, 118, 0.2)' }]}>
+                <Text style={[styles.testPlayBadgeText, { color: '#00E676' }]}>TEST 🔊</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Secondary Sound Effects Grid */}
+          <Text style={[styles.testCategoryHeader, { marginTop: 12 }]}>ADDITIONAL SOUND EFFECTS</Text>
           <View style={styles.previewGrid}>
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playStartSound()}>
+              onPress={() => handleTestSound('Engine Start', 'engine_start.mp3', playStartSound)}>
               <Text style={styles.previewChipIcon}>🏎️</Text>
               <Text style={styles.previewChipText}>Engine Start</Text>
             </TouchableOpacity>
@@ -270,7 +371,7 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playDash()}>
+              onPress={() => handleTestSound('Dash Boost', 'car_dash.mp3', playDash)}>
               <Text style={styles.previewChipIcon}>⚡</Text>
               <Text style={styles.previewChipText}>Dash Boost</Text>
             </TouchableOpacity>
@@ -278,7 +379,7 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playBrake()}>
+              onPress={() => handleTestSound('Brake Skid', 'car_break.mp3', playBrake)}>
               <Text style={styles.previewChipIcon}>🛑</Text>
               <Text style={styles.previewChipText}>Brake Skid</Text>
             </TouchableOpacity>
@@ -286,7 +387,7 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playHonkSound()}>
+              onPress={() => handleTestSound('Car Honk', 'car_honk.mp3', playHonkSound)}>
               <Text style={styles.previewChipIcon}>🎺</Text>
               <Text style={styles.previewChipText}>Car Honk</Text>
             </TouchableOpacity>
@@ -294,23 +395,7 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playBlastSound()}>
-              <Text style={styles.previewChipIcon}>💥</Text>
-              <Text style={styles.previewChipText}>Car Blast</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.previewChip}
-              activeOpacity={0.7}
-              onPress={() => playCoinSound()}>
-              <Text style={styles.previewChipIcon}>🪙</Text>
-              <Text style={styles.previewChipText}>Coin Collect</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.previewChip}
-              activeOpacity={0.7}
-              onPress={() => playCoinVoice()}>
+              onPress={() => handleTestSound('Coin Voice', 'coin_collecting.mp3', playCoinVoice)}>
               <Text style={styles.previewChipIcon}>🗣️</Text>
               <Text style={styles.previewChipText}>Coin Voice</Text>
             </TouchableOpacity>
@@ -318,7 +403,7 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => playCountdownSound()}>
+              onPress={() => handleTestSound('3,2,1 GO!', 'countdown_3_2_1_go.mp3', playCountdownSound)}>
               <Text style={styles.previewChipIcon}>🏁</Text>
               <Text style={styles.previewChipText}>3,2,1 GO!</Text>
             </TouchableOpacity>
@@ -344,6 +429,19 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={styles.copyrightText}>Build 1.0.0 • Mobile Highway Racing</Text>
         </View>
       </ScrollView>
+
+      {/* In-Game Custom Modal Popup */}
+      <CustomModal
+        visible={modalConfig.visible}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        icon={modalConfig.icon}
+        type={modalConfig.type}
+        confirmText={modalConfig.confirmText}
+        cancelText={modalConfig.cancelText}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={() => setModalConfig(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 };
@@ -477,7 +575,79 @@ const styles = StyleSheet.create({
   previewSubtitle: {
     fontSize: 11,
     color: colors.textSecondary,
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  activeTestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: '#00E5FF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+  },
+  activeTestIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  activeTestText: {
+    color: '#00E5FF',
+    fontWeight: '800',
+    fontSize: 11.5,
+    letterSpacing: 1,
+  },
+  testCategoryHeader: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  primaryTestColumn: {
+    marginBottom: 8,
+  },
+  primaryTestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(22, 27, 34, 0.9)',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  testCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  primaryTestIcon: {
+    fontSize: 22,
+    marginRight: 10,
+  },
+  primaryTestTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  primaryTestFile: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  testPlayBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  testPlayBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   previewGrid: {
     flexDirection: 'row',

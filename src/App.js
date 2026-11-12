@@ -1,11 +1,15 @@
 import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import Navigation from './helpers/navigation';
+import StackNavigator from './helpers/navigation';
+import { navigationRef } from './helpers/navigationHelper';
 
 const App = () => {
   return (
     <SafeAreaProvider>
-      <Navigation />
+      <NavigationContainer ref={navigationRef}>
+        <StackNavigator />
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 };

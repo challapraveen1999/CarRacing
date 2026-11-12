@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import colors from '../helpers/colorCodes.json';
 
 const CarSprite = ({
@@ -13,7 +13,28 @@ const CarSprite = ({
   isDamaged = false,
   isSmashed = false,
   vehicleType = 'sports',
+  image = null,
 }) => {
+  if (image) {
+    return (
+      <View style={[styles.container, { width, height }]}>
+        <Image
+          source={image}
+          style={[
+            styles.carImage,
+            { width, height },
+            isSmashed && styles.smashedImage,
+            isDamaged && styles.damagedImage,
+          ]}
+          resizeMode="contain"
+        />
+        {isBraking && !isSmashed && (
+          <View style={styles.imageBrakeGlow} pointerEvents="none" />
+        )}
+      </View>
+    );
+  }
+
   const isTruck = vehicleType === 'truck';
 
   return (
@@ -355,6 +376,30 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: '#FF5722',
+  },
+  carImage: {
+    alignSelf: 'center',
+  },
+  smashedImage: {
+    opacity: 0.85,
+    transform: [{ scaleY: 0.85 }, { rotate: '-6deg' }],
+  },
+  damagedImage: {
+    opacity: 0.9,
+  },
+  imageBrakeGlow: {
+    position: 'absolute',
+    bottom: -6,
+    left: '20%',
+    right: '20%',
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FF1744',
+    shadowColor: '#FF1744',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 8,
   },
 });
 
