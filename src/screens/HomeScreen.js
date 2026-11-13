@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import colors from '../helpers/colorCodes.json';
 import { loadAllGameData } from '../helpers/storage';
 import { getCarById, getCarThemeColor } from '../helpers/carsData';
-import { playEffect } from '../helpers/SoundManager';
+import { playEffect, setDrivingActive, stopDrivingSounds, stopAll } from '../helpers/SoundManager';
 import CarSprite from '../components/CarSprite';
 
 const hexToRgba = (hex, opacity) => {
@@ -42,10 +42,13 @@ const HomeScreen = ({ navigation }) => {
   const pulsePlayAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(1)).current;
 
-  // Refresh saved stats every time Home screen is focused
+  // Refresh saved stats and ensure driving sounds are completely silenced on Home focus
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      setDrivingActive(false);
+      stopDrivingSounds();
+      stopAll();
       loadAllGameData().then(data => {
         if (isMounted) {
           setGameData(data);
@@ -148,11 +151,11 @@ const HomeScreen = ({ navigation }) => {
           style={styles.heroCarContainer}
           activeOpacity={0.88}
           onPress={() => handleNav('Garage')}>
-          {/* Active Car Name Badge */}
+          {/* Active Car Name Badge (Tapping car opens Garage) */}
           <View style={[styles.activeVehicleBadge, { borderColor: carThemeColor }]}>
             <Text style={styles.activeVehicleBadgeIcon}>{activeCar?.icon || '🏎️'}</Text>
             <Text style={[styles.activeVehicleBadgeText, { color: carThemeColor }]}>
-              {activeCar?.name?.toUpperCase() || 'APEX TURBO'}
+              {activeCar?.name?.toUpperCase() || 'APEX TURBO'} • TAP TO CHANGE
             </Text>
           </View>
 
@@ -254,24 +257,14 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Game Modes & Garage buttons */}
-          <View style={styles.secondaryActionsRow}>
-            <TouchableOpacity
-              style={styles.modeButton}
-              activeOpacity={0.8}
-              onPress={() => handleNav('Modes')}>
-              <Text style={styles.secondaryButtonIcon}>🏁</Text>
-              <Text style={styles.secondaryButtonText}>MODES</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.garageButton}
-              activeOpacity={0.8}
-              onPress={() => handleNav('Garage')}>
-              <Text style={styles.secondaryButtonIcon}>🏎️</Text>
-              <Text style={styles.secondaryButtonText}>GARAGE</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Racing Modes button (Garage button removed as requested, tap car above to customize) */}
+          <TouchableOpacity
+            style={styles.modeButtonFull}
+            activeOpacity={0.8}
+            onPress={() => handleNav('Modes')}>
+            <Text style={styles.secondaryButtonIcon}>🏁</Text>
+            <Text style={styles.secondaryButtonText}>RACING MODES</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -495,23 +488,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontStyle: 'italic',
   },
-  secondaryActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modeButton: {
-    flex: 0.48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(22, 27, 34, 0.95)',
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  garageButton: {
-    flex: 0.48,
+  modeButtonFull: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

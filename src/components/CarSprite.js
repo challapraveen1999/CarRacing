@@ -12,12 +12,39 @@ const CarSprite = ({
   isNitro = false,
   isDamaged = false,
   isSmashed = false,
+  isShielded = false,
+  showHeadlights = true,
   vehicleType = 'sports',
   image = null,
 }) => {
   if (image) {
     return (
       <View style={[styles.container, { width, height }]}>
+        {/* Realistic 3D Ground Projection Shadow */}
+        <View
+          style={[
+            styles.imageGroundShadow,
+            { width: width * 0.92, height: height * 0.88 },
+          ]}
+          pointerEvents="none"
+        />
+
+        {/* Dynamic Forward Headlights Projection Beams */}
+        {showHeadlights && !isSmashed && (
+          <View style={styles.headlightBeamContainer} pointerEvents="none">
+            <View style={[styles.headlightBeam, styles.headlightBeamLeft]} />
+            <View style={[styles.headlightBeam, styles.headlightBeamRight]} />
+          </View>
+        )}
+
+        {/* Safe Zone Forcefield Shield Envelope */}
+        {isShielded && (
+          <View style={styles.shieldForcefieldHalo} pointerEvents="none">
+            <View style={styles.shieldPulseRing} />
+          </View>
+        )}
+
+        {/* High-Resolution Vehicle PNG Sprite */}
         <Image
           source={image}
           style={[
@@ -28,9 +55,111 @@ const CarSprite = ({
           ]}
           resizeMode="contain"
         />
+
+        {/* Engine Smoke Plume when Damaged */}
+        {(isDamaged || isSmashed) && (
+          <View style={styles.engineSmokeBurst} pointerEvents="none">
+            <View style={isSmashed ? styles.smokePuffLarge : styles.smokePuffSmall} />
+            {isSmashed && <View style={styles.engineFireBurst} />}
+          </View>
+        )}
+
+        {/* Dynamic Red Brake Lights Glow */}
         {isBraking && !isSmashed && (
           <View style={styles.imageBrakeGlow} pointerEvents="none" />
         )}
+
+        {/* Twin Cyber Cyan Boost Flame Jets */}
+        {isNitro && !isSmashed && (
+          <View style={styles.imageNitroFlameRow} pointerEvents="none">
+            <View style={styles.imageFlameOuter}>
+              <View style={styles.imageFlameCore} />
+            </View>
+            <View style={styles.imageFlameOuter}>
+              <View style={styles.imageFlameCore} />
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  const isBike = vehicleType === 'bike';
+  if (isBike) {
+    return (
+      <View style={[styles.container, { width, height }]}>
+        {/* Ground shadow beneath motorbike */}
+        <View
+          style={[
+            styles.bikeGroundShadow,
+            { width: width * 0.75, height: height * 0.85 },
+          ]}
+          pointerEvents="none"
+        />
+
+        {/* Motorcycle Headlight Beam Projection */}
+        {showHeadlights && !isSmashed && (
+          <View style={styles.bikeHeadlightBeam} pointerEvents="none" />
+        )}
+
+        {/* Front In-Line Rubber Tire */}
+        <View style={[styles.bikeTire, styles.bikeFrontTire, isSmashed && styles.smashedTireLeft]}>
+          <View style={styles.bikeWheelRim} />
+        </View>
+
+        {/* Rear In-Line Rubber Tire */}
+        <View style={[styles.bikeTire, styles.bikeRearTire]}>
+          <View style={styles.bikeWheelRim} />
+        </View>
+
+        {/* Chrome Exhaust Pipe */}
+        <View style={styles.bikeExhaust} />
+
+        {/* Main Motorcycle Body / Chassis Frame */}
+        <View
+          style={[
+            styles.bikeChassis,
+            { backgroundColor: bodyColor },
+            isSmashed && styles.smashedChassis,
+          ]}>
+          {/* Front Chrome Forks & Handlebars */}
+          <View style={styles.bikeHandlebars}>
+            <View style={styles.bikeHandleGrip} />
+            <View style={styles.bikeHandleGrip} />
+          </View>
+
+          {/* Aerodynamic Front Cowl & Headlight */}
+          <View style={[styles.bikeCowl, { backgroundColor: bodyColor }]}>
+            <View style={styles.bikeHeadlight} />
+          </View>
+
+          {/* Fuel Tank with Racing Stripe */}
+          <View style={styles.bikeFuelTank}>
+            <View style={[styles.bikeTankStripe, { backgroundColor: stripeColor }]} />
+          </View>
+
+          {/* Rider: Leather Jacket Shoulders & Helmet */}
+          <View style={styles.bikeRiderTorso}>
+            <View style={styles.bikeHelmet}>
+              {/* Tinted Visor */}
+              <View style={styles.bikeVisor} />
+            </View>
+          </View>
+
+          {/* Rear Seat & Tail Section */}
+          <View style={[styles.bikeTail, { backgroundColor: bodyColor }]}>
+            {/* Rear Taillight */}
+            <View style={[styles.bikeTaillight, isBraking && styles.bikeTaillightBraking]} />
+          </View>
+
+          {/* Engine Smoke on Damage / Smash */}
+          {(isDamaged || isSmashed) && (
+            <View style={styles.engineSmokeBurst}>
+              <View style={isSmashed ? styles.smokePuffLarge : styles.smokePuffSmall} />
+              {isSmashed && <View style={styles.engineFireBurst} />}
+            </View>
+          )}
+        </View>
       </View>
     );
   }
@@ -400,6 +529,262 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 10,
     elevation: 8,
+  },
+  imageGroundShadow: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderRadius: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.85,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 0,
+  },
+  headlightBeamContainer: {
+    position: 'absolute',
+    top: -70,
+    left: 0,
+    right: 0,
+    height: 75,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    zIndex: 0,
+  },
+  headlightBeam: {
+    width: 22,
+    height: 75,
+    backgroundColor: 'rgba(255, 255, 220, 0.12)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    transform: [{ scaleY: 1.1 }],
+  },
+  headlightBeamLeft: {
+    transform: [{ rotate: '-6deg' }],
+  },
+  headlightBeamRight: {
+    transform: [{ rotate: '6deg' }],
+  },
+  shieldForcefieldHalo: {
+    position: 'absolute',
+    top: -12,
+    bottom: -12,
+    left: -12,
+    right: -12,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#00E5FF',
+    backgroundColor: 'rgba(0, 229, 255, 0.18)',
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 18,
+    elevation: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+  },
+  shieldPulseRing: {
+    position: 'absolute',
+    top: -4,
+    bottom: -4,
+    left: -4,
+    right: -4,
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.55)',
+  },
+  imageNitroFlameRow: {
+    position: 'absolute',
+    bottom: -22,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '48%',
+    alignSelf: 'center',
+    zIndex: 2,
+  },
+  imageFlameOuter: {
+    width: 9,
+    height: 22,
+    backgroundColor: '#00F0FF',
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+    alignItems: 'center',
+    shadowColor: '#00F0FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+  },
+  imageFlameCore: {
+    width: 5,
+    height: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+    marginTop: 2,
+  },
+  // Motorcycle / Bike Aesthetics
+  bikeGroundShadow: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderRadius: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 0,
+  },
+  bikeHeadlightBeam: {
+    position: 'absolute',
+    top: -55,
+    width: 18,
+    height: 60,
+    backgroundColor: 'rgba(255, 255, 220, 0.16)',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    alignSelf: 'center',
+    zIndex: 0,
+  },
+  bikeTire: {
+    position: 'absolute',
+    width: 6,
+    height: 16,
+    backgroundColor: '#0A0D12',
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#21262D',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  bikeFrontTire: {
+    top: 2,
+  },
+  bikeRearTire: {
+    bottom: 2,
+  },
+  bikeWheelRim: {
+    width: 2,
+    height: 8,
+    backgroundColor: '#8B949E',
+    borderRadius: 1,
+  },
+  bikeExhaust: {
+    position: 'absolute',
+    right: 2,
+    bottom: 8,
+    width: 3,
+    height: 18,
+    backgroundColor: '#C0C0C0',
+    borderRadius: 1.5,
+    zIndex: 1,
+  },
+  bikeChassis: {
+    width: 22,
+    height: 52,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#0D1117',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 2,
+  },
+  bikeHandlebars: {
+    position: 'absolute',
+    top: 6,
+    width: 24,
+    height: 3,
+    backgroundColor: '#C0C0C0',
+    borderRadius: 1.5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    zIndex: 3,
+  },
+  bikeHandleGrip: {
+    width: 4,
+    height: 3,
+    backgroundColor: '#111111',
+    borderRadius: 1,
+  },
+  bikeCowl: {
+    width: 14,
+    height: 8,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  bikeHeadlight: {
+    width: 6,
+    height: 3,
+    backgroundColor: '#FFFDE7',
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  bikeFuelTank: {
+    width: 14,
+    height: 12,
+    borderRadius: 4,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  bikeTankStripe: {
+    width: 3,
+    height: '100%',
+  },
+  bikeRiderTorso: {
+    width: 16,
+    height: 14,
+    borderRadius: 6,
+    backgroundColor: '#1E232A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  bikeHelmet: {
+    width: 11,
+    height: 12,
+    borderRadius: 5.5,
+    backgroundColor: '#161B22',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bikeVisor: {
+    width: 7,
+    height: 3,
+    backgroundColor: '#00E5FF',
+    borderRadius: 1.5,
+    marginTop: -2,
+  },
+  bikeTail: {
+    width: 10,
+    height: 8,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 1,
+  },
+  bikeTaillight: {
+    width: 6,
+    height: 2.5,
+    backgroundColor: '#B71C1C',
+    borderRadius: 1,
+  },
+  bikeTaillightBraking: {
+    backgroundColor: '#FF1744',
+    shadowColor: '#FF1744',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 6,
   },
 });
 

@@ -132,14 +132,15 @@ d:\CarRacing/
 
 ## 5. Key Subsystems Explained
 
-### 5.1. 60 FPS Game Loop & Kinematics (`src/screens/GameScreen.js`)
+### 5.1. 60 FPS Game Loop, Kinematics & Finger Drag Control System (`src/screens/GameScreen.js`)
+* **100% Touch & Drag Driving Control**:
+  All legacy on-screen driving buttons (Left, Right, Brake, Dash) have been completely removed from the display. The entire driving experience is seamlessly controlled through intuitive finger gestures on the display:
+  - **Drag UP**: Accelerates and engages high-velocity Boost ($390\text{ km/h}$), firing twin cyber-cyan flame thrusters and roaring exhaust audio while drawing from the boost energy reservoir at $24\%/\text{sec}$.
+  - **Drag DOWN**: Applies heavy deceleration down to $110\text{ km/h}$, activating bright red brake lights, laying rubber tire skid marks, and playing tire screech sounds.
+  - **Drag LEFT / RIGHT**: Smooth, responsive continuous lateral steering across the entire width of the highway without predefined lane locks, naturally rolling the car chassis with progressive tilt ($\pm 14^\circ$).
+  - **Diagonal Dragging**: Combines steering and acceleration/braking simultaneously (e.g. steer left while boosting to escape an aggressive blocker).
+  - **Neutral / Idle**: Cruising speed of $220\text{ km/h}$, naturally recovering boost energy at $+14\%/\text{sec}$ up to $100\%$.
 * **Frame Rate Synchronization**: Controlled through `requestAnimationFrame(loop)`. Every tick computes `delta = (timestamp - lastTime) / 1000`, capped at `0.1s` to prevent frame jumping when resuming from backgrounding.
-* **Kinematics**:
-  - Base speed begins at $220\text{ km/h}$ multiplied by the game mode coefficient.
-  - Holding **DASH (⚡)** consumes nitro fuel at $28\%/\text{sec}$ while boosting speed up to $360\text{ km/h}$.
-  - Holding **BRAKE (🛑)** applies smooth deceleration down to $120\text{ km/h}$.
-  - Distance accumulates as $\text{distance} += \text{speed} \times \delta \times 0.28$.
-  - Highway stripes, obstacles, powerups, and coins scroll downwards synchronously with the player's moving speed.
 * **Drive Mode Sound Isolation**:
   - Continuous engine loops (`car_engine2.mp3`) and background racing music (`racing.mp3`) play **only when the player is actively in Drive Mode**.
   - When the user hits the in-app Back button (`‹`), Settings button (`⚙️`), Pause button (`⏸`), or triggers Android hardware/gesture back navigation, the game immediately suspends drive mode, kills any pending countdown timers, and mutes all driving sounds.
@@ -149,18 +150,20 @@ d:\CarRacing/
     2. **🔄 RESTART**: Resets the current run's distance, score, and traffic, running a clean 3-2-1-GO sequence.
     3. **🏠 BACK TO HOME**: Atomically records earned coins and career records, terminates all sound channels, and safely navigates to the Home Screen.
 
-### 5.2. Collision Detection & Safe Mode Immunity (`src/helpers/gameLogic.js`)
-* **Axis-Aligned Bounding Box (AABB)**:
-  `checkCollision(rectA, rectB, marginRatio)` tests overlap across horizontal and vertical axes with an adjustable tolerance margin (default $12\%$) to prevent unfair edge clipping.
-* **Safe Mode Immunity System**:
-  - When Safe Mode is active (`state.shield === true` or `activeShield === true`):
-    - Vehicle collisions inflict **0 HP damage** (`continue;`).
-    - The colliding traffic obstacle is instantly deflected and removed from the lane.
-    - Player receives a **+100 bonus score** and $+15\%$ Nitro refill.
-    - Safe Mode lasts for strictly **10 seconds** (`POWERUPS.SHIELD.duration = 10`) with a live countdown pill on the HUD (`🛡️ SAFE MODE (10s)`).
-    - Upon expiration, an automatic **2.5-second invulnerability recovery window** (`state.invulnerableTimer = 2.5`) shields the player against immediate damage.
-    - **Alternating Ejection Physics**: Rammed vehicles alternate strictly between flinging to the **LEFT ⬅️** on hit 1, **RIGHT ➡️** on hit 2, **LEFT ⬅️** on hit 3, etc.
-    - **Silent Lane Switching**: Lane shifts are completely silent (`playDash` removed from `shiftLane`).
+### 5.2. Collision Detection & Visible Safe Zone System (`src/helpers/gameLogic.js`)
+* **Continuous Axis-Aligned Bounding Box (AABB)**:
+  `checkCollision(rectA, rectB, marginRatio)` tests overlap across continuous floating-point horizontal and vertical coordinates with an adjustable tolerance margin (default $12\%$).
+* **Visible Safe Zone Sectors on Highway**:
+  - Glowing Safe Zone fields spawn periodically down the highway (every $\sim 380-400\text{ meters}$) with high-tech cyan borders, glowing energy fields, overhead portal entrance banners (*"🛡️ SAFE ZONE ENTRY 🛡️"*), and exit banners.
+  - While driving through a Safe Zone (or when holding a Safe Mode powerup shield), the player's supercar is enveloped in an energetic forcefield dome (`isShielded={true}`).
+  - **0 HP Collision Immunity**: Colliding with any traffic vehicle inside a Safe Zone inflicts **0 HP damage**!
+  - **3D Airborne Catapult Ejection**: Rammed opponent vehicles are catapulted high into the air (scaling up to $1.7\times$ at mid-air apex with 3D ground projection shadow and $640^\circ/\text{sec}$ barrel rolls) and launched completely off the highway, alternating strictly between Left and Right on each takedown.
+  - **Takedown Rewards**: Displays a prominent floating notification (*"🛡️ SAFE ZONE PROTECTED! (+100 PTS)"*), awarding $+100\text{ bonus points}$ and $+15\%$ instant Nitro boost fuel refill.
+* **Outside Safe Zone Damage Mechanics**:
+  - Outside of safe zones, collisions inflict $-30\text{ HP}$ structural damage.
+  - Accompanied by explosive crash audio, screen jolt, red accident flash, and realistic engine smoke plumes.
+  - Features an automatic $1.4\text{s}$ post-hit invulnerability recovery window (`state.invulnerableTimer = 1.4`) to prevent unfair multi-frame elimination.
+  - If vehicle health reaches $0\text{ HP}$, an explosive fireball shockwave triggers the Game Over sequence.
 
 ### 5.3. Coin Economy & Zero-Backend Storage (`src/helpers/storage.js`)
 * **Universal AsyncStorage Adapter**:
@@ -176,25 +179,29 @@ d:\CarRacing/
   $$\text{totalCoins} = \text{walletCoins} + \text{runCoins}$$
 
 ### 5.4. Garage & Supercar Progression (`src/helpers/carsData.js`)
-All 6 supercar models feature tailored handling, acceleration, top speeds, armor ratings, and real PNG image sprites:
+All 8 vehicle models (including the newly added supersonic motorcycle and heavy armored truck) feature tailored handling, acceleration, top speeds, armor ratings, and real high-resolution PNG image sprites. Vehicle prices start from 2,000+ coins:
 
 | ID | Vehicle Name | Price | Asset | Unique Attribute |
 |---|---|---|---|---|
 | `car_01` | **Apex Turbo** | **FREE** | `red-car.png` | Balanced starter supercar |
-| `car_02` | **Neon Viper** | **500 🪙** | `blue-car.png` | Enhanced cornering agility |
-| `car_03` | **Phantom Shadow** | **1,200 🪙** | `white-car.png` | High top speed |
-| `car_04` | **Thunder GT** | **2,500 🪙** | `yellow-car.png` | Rapid nitro acceleration |
-| `car_05` | **Cyber Valkyrie** | **5,000 🪙** | `blackred-car.png`| Heavy armor plating |
-| `car_06` | **Shadow Phantom** | **8,000 🪙** | `Black-car.png` | Maximum velocity & grip |
+| `car_02` | **Neon Viper** | **2,000 🪙** | `blue-car.png` | Enhanced cornering agility |
+| `car_03` | **Phantom Shadow** | **4,500 🪙** | `white-car.png` | High top speed |
+| `car_04` | **Thunder GT** | **7,500 🪙** | `yellow-car.png` | Rapid nitro acceleration |
+| `car_05` | **Cyber Valkyrie** | **11,000 🪙** | `blackred-car.png`| Heavy armor plating |
+| `car_06` | **Shadow Phantom** | **15,000 🪙** | `Black-car.png` | Maximum velocity & grip |
+| `car_07` | **Sonic Superbike** | **18,500 🪙** | `bike.png` | Supersonic acceleration & handling |
+| `car_08` | **Titan Hauler** | **22,000 🪙** | `truck.png` | Armored powerhouse with max nitro |
 
 ### 5.5. Audio & Voiceover Engine (`src/helpers/SoundManager.js`)
 * **Engine Synthesis**: Continuous pitch and volume scaling proportional to vehicle speed (`car_engine2.mp3`).
 * **Countdown Vocalizer**: Real voice clips announcing *"3... 2... 1... GO!"* with synchronous visual count-in (`countdown_3_2_1_go.mp3`).
-* **Core Event Audio**:
-  - `coin_collecting.mp3`: Distinct chime on coin pickup with voiceover (*"COIN COLLECTED!"*).
+* **Core Event Audio & Enhanced Effects**:
+  - `coin_collecting.mp3` & `coin_collect.mp3`: Distinct crisp chime on coin pickup with coin collection feedback.
+  - `car_dash.mp3`: Kinetic cyber-swoosh chime triggered whenever the player initiates Dash Boost (Drag UP) and on health repair pack pickup (`+35 HP`).
+  - `car_horn.mp3` & `car_honk.mp3`: Real dual-tone car horn sounded on any quick tap of the highway track (*"🎺 BEEP BEEP!"*).
+  - `car_break.mp3` & `break_effect.mp3`: Dynamic asphalt tire screech and brake decelerator on Drag DOWN.
   - `blast.mp3`: Deep explosive impact sound on car-to-car collision / crash accident.
-  - `car_dash.mp3`: Smooth cyber-swoosh chime on health repair pack pickup (`+35 HP`).
-* **Settings Audio Test Suite**: Dedicated interactive preview chips in `SettingsScreen.js` enabling instant hardware-level playback tests for Coin Collecting, Car Collision / Crash, and Health Pack Collect with live active playing banners.
+* **Settings Audio Test Suite**: Dedicated interactive preview chips in `SettingsScreen.js` enabling instant hardware-level playback tests for Coin Collecting, Car Collision / Crash, Car Horn, Dash Boost, Brake Skid, and Health Pack Collect with live active playing banners.
 * **Headless Safety**: When executed under Jest unit test runners, automatically falls back to procedural no-op stubs to avoid native binary linking failures.
 
 ### 5.6. Dynamic Vehicle Elevation & Neon Underglow (`src/screens/HomeScreen.js`)
@@ -216,7 +223,59 @@ All 6 supercar models feature tailored handling, acceleration, top speeds, armor
 
 ### 5.8. High-Contrast White & Black Track Dividers & Curbs
 * **Alternating Monochrome Rumble Curbs**: Road borders feature alternating pure white (`#FFFFFF`) and deep carbon black (`#0D1117`) segments with high-contrast borders replacing generic red stripes.
-* **Crisp Road Dividers**: Pure white dashed lane dividers with soft illumination contrast sharply against dark asphalt.
+* **Crisp Road Dividers**: Pure white dashed lane dividers with soft illumination contrast sharply against dark asphalt across all 4 highway lanes.
+
+### 5.9. Highway Traffic Lane Discipline & Realistic Lane Transitions (`src/screens/GameScreen.js`)
+* **Strict Lane Alignment**:
+  - Opponent traffic vehicles (Cars, Nimble Bikes, Vans, Trucks, Buses) spawn accurately centered within one of the four highway lanes (Lane 0, 1, 2, or 3), maintaining proper traffic discipline.
+  - Vehicles drive straight down their assigned lanes rather than continuously snaking or weaving back and forth over lane divider markers.
+* **Realistic Occasional Lane Changes**:
+  - Approximately $15\%$ of traffic vehicles (1 or 2 cars or bikes) are assigned an occasional, single smooth lane shift (`willSwitchLane = true`) to an adjacent lane ($\pm 1$).
+  - Once they reach their trigger depth (`switchAtY`), they smoothly slide across into the center of the adjacent target lane at $1.25\text{ px/frame}$, complete the transition (`hasSwitched = true`), and remain locked in that lane for the rest of their run.
+
+### 5.10. Interactive 5–10 Second Tutorial Overlay
+* **Visual Gesture Demonstrator**: When the game launches, a futuristic glassmorphic instructional card presents clear gesture demonstrations with an animated hand icon moving in real-time:
+  - 👆 **Drag UP**: Accelerate & Boost
+  - 👇 **Drag DOWN**: Brake & Slow Down
+  - ↔️ **Drag LEFT / RIGHT**: Free Highway Steering
+  - 🛡️ **Safe Zones**: Invincible Forcefield Shield & Ram Protection
+  - ❤️ **Repair Kits & Coins**: Restore vehicle health ($+35\text{ HP}$) and build coin bank
+  - ⚠️ **Avoid Traffic**: Dodge erratic drivers and survive
+* **Non-Blocking & Skip Control**: Features an interactive **[ SKIP › ]** button and auto-hides after $7\text{ seconds}$ or instantly upon the player initiating their first steering drag gesture.
+
+### 5.11. Minimalist Modern 5G/6G HUD Cluster
+* **Ultra-Clean Unobstructed Highway**: All on-screen pedal and steering buttons have been completely eradicated, granting the player full, crystal-clear view of oncoming traffic and the open highway.
+* **Glassmorphic Status Array**:
+  - **In-App Back (`‹`)**: Direct one-tap pause and options access.
+  - **Car Health Meter**: Real-time gradient health bar (Green $>60\%$, Amber $31-60\%$, Pulsing Crimson $\le 30\%$) with live numerical percentage.
+  - **Dynamic Speedometer & Survival Clock**: Instantaneous velocity in $\text{KM/H}$ with cyber-cyan speed glow during nitro, alongside live survival elapsed duration ($\text{MM:SS}$).
+  - **Boost Energy Reservoir**: Cyan gauge tracking available nitro fuel ($0-100\%$).
+  - **Coin Counter**: Live accumulated run coin pill.
+  - **Tactical Safe Zone Indicator**: Glowing cyan indicator showing active safe zone status.
+
+### 5.12. High-Speed Motorcycle / Motorbike Opponents (`src/components/CarSprite.js`)
+* **Dedicated Top-Down Motorcycle Sprite**:
+  - Added `'bike'` to the oncoming traffic roster alongside sports cars, delivery vans, cargo trucks, and transit buses.
+  - **Anatomy**:
+    - Two centered in-line rubber tires (front wheel at top, rear wheel at bottom) with metallic rim centers, eliminating car side tires.
+    - Chrome handlebars with dual rubber grips and chrome exhaust pipe.
+    - Aerodynamic front cowl with bright forward LED headlight projection beam.
+    - Fuel tank with racing stripe in vehicle color.
+    - Rider torso clad in dark protective leathers and full-face helmet with cyber visor.
+    - Rear tapered tail section with red LED taillights.
+* **Dynamic Handling & Speed Multiplier**:
+  - Motorbikes cruise down the highway at $+18\%$ speed (`speedMult: 1.18`) with high agility, creating thrilling near-miss opportunities.
+* **Safe Zone Airborne Catapult Integration**:
+  - When rammed while player is inside a Safe Zone, motorbikes undergo 3D parabolic aerial flips, flinging out of the track with custom takedown notification: `🛡️ SAFE ZONE PROTECTED! 🏍️ MOTORBIKE JUMPED OUT OF TRACK! (+100 PTS)`.
+
+### 5.13. Streamlined Home Screen Architecture (`src/screens/HomeScreen.js`)
+* **Dynamic Elevation Podiums**:
+  - The hero car elevation halo, "RUSH" neon text, and "⚡ RACE NOW" button dynamically adopt the active car's color (Electric Blue `#00A8FF` for Neon Viper, Hot Red `#FF2A54` for Apex Turbo, Gold `#FFD600` for Thunder GT, Neon Magenta `#FF0080` for Phantom Shadow, Crimson `#FF1744` for Cyber Valkyrie, Electric Violet `#7C4DFF` for Shadow Phantom).
+* **Direct Hero Car Customization**:
+  - Replaced the bottom bar Garage button with a sleek, full-width `🏁 RACING MODES` action.
+  - Tapping the prominent Hero Car directly opens the Garage (`onPress={() => handleNav('Garage')}`) with clear badge guidance: `[ ⚡ NEON VIPER • TAP TO CHANGE ]`.
+  - **Pause Button (`⏸`)**: Direct trigger for drive mode suspension.
+  - **Dynamic Status Badges**: Floating contextual pills for `🛡️ SAFE ZONE PROTECTED`, `🧲 COIN MAGNET`, and `⚠️ CRITICAL DAMAGE! FIND REPAIR KIT`.
 
 ---
 
@@ -240,12 +299,21 @@ All 6 supercar models feature tailored handling, acceleration, top speeds, armor
 
 ## 8. Verification & Quality Assurance
 
+### Audio Engine & Sound Stability Fixes
+* **Strict Driving Mode Containment**: Implemented `setDrivingActive(boolean)` and `stopDrivingSounds()`. Driving sounds (engine roar, synthwave racing music, dash boost, brake skid) play strictly when the car is on the track actively driving. The moment the race finishes, car crashes, health hits 0, game pauses, or the user exits, all driving sounds are halted immediately.
+* **Asynchronous Preparation Cancellation Guard**: All pending and preparing native `MediaPlayer` instances are tracked in an `activeSounds` map. If a sound finishes preparing after the game is over, paused, or stopped, the callback detects the deactivated driving state, releases the native player immediately, and never triggers `.play()`, eliminating orphaned or zombie audio loops.
+* **Elimination of `isAppActive` Sound Gate**: Removed fragile `AppState` flag gating one-shot sounds. Sound effects (`coin_collecting`, `car_dash`, `car_honk`, `blast`, `car_break`) play cleanly without getting silenced by Android system/modal state transitions.
+* **Dual Resource Fallback & Compiled APK Compatibility**: Implemented bidirectional fallback mappings (`car_honk` $\leftrightarrow$ `car_horn`, `coin_collecting` $\leftrightarrow$ `coin_collect`, `car_break` $\leftrightarrow$ `break_effect`, `car_dash` $\leftrightarrow$ `car_boosting`) ensuring seamless playback across builds regardless of raw resource compile timing.
+* **Non-Blocking Concurrent Sound Playback**: Replaced premature stop/release with independent one-shot sound lifecycles, preventing `IllegalStateException` crashes on Android MediaPlayer while retaining managed loops for engine idling and synthwave music.
+* **Test Preview Bypass**: Settings test triggers pass `force = true`, ensuring audio previews play loud and clear even if effects or music toggles were switched off.
+* **Drive Mode Sound Containment & Pause Modal**: Driving sounds play only during active driving; pausing (via in-app back/pause or device navigation) immediately suspends engine loops and music, opening the interactive Pause Modal (`Continue`, `Restart`, `Back to Home`).
+
 ### Unit Test Suites (`npm test`)
 * `__tests__/storage.test.js`: Validates atomic coin accumulation, car purchasing, balance deduction, and career record updates.
 * `__tests__/gameLogic.test.js`: Tests AABB collision detection, near-miss tolerances, score calculations, and Safe Mode deflection.
-* `__tests__/soundManager.test.js`: Verifies volume controls, sound toggles, and mock audio fallbacks.
+* `__tests__/soundManager.test.js`: Verifies volume controls, sound toggles, alias resolution, driving mode state gates, and mock audio fallbacks.
 * `__tests__/App.test.tsx`: Verifies clean component mounting and screen navigation setup.
-* **Status**: **4 Suites Passed, 23/23 Tests Green**.
+* **Status**: **4 Suites Passed, 24/24 Tests Green**.
 
 ### Code Style & Linter (`npm run lint`)
 * **Status**: **0 Errors**.

@@ -47,21 +47,37 @@ export const GAME_MODES = {
 };
 
 export const ROAD_CONFIG = {
-  LANES_COUNT: 3,
-  ROAD_WIDTH: Math.min(SCREEN_WIDTH * 0.90, 400),
+  LANES_COUNT: 4, // Spacious 4-lane open highway
+  ROAD_WIDTH: Math.min(SCREEN_WIDTH * 0.94, 420),
   STRIPE_HEIGHT: 48,
   STRIPE_GAP: 32,
-  SHOULDER_WIDTH: 10,
+  SHOULDER_WIDTH: 12,
 };
 
 export const CAR_CONFIG = {
   WIDTH: 52,
   HEIGHT: 96,
-  BASE_SPEED: 180,
+  BASE_SPEED: 200,
   MAX_SPEED: 320,
-  NITRO_SPEED: 410,
-  ACCELERATION_RATE: 25,
-  DECELERATION_RATE: 30,
+  NITRO_SPEED: 400,
+  ACCELERATION_RATE: 28,
+  DECELERATION_RATE: 35,
+};
+
+export const BOOST_CONFIG = {
+  RECHARGE_RATE: 14, // % per second recharged when idle
+  CONSUMPTION_RATE: 24, // % per second consumed when dragging UP
+  MAX_BOOST_SPEED: 390,
+  MIN_BRAKE_SPEED: 110,
+  CRUISE_SPEED: 220,
+};
+
+export const SAFE_ZONE_CONFIG = {
+  ZONE_HEIGHT: 280, // Height of glowing road safe field
+  SPAWN_INTERVAL_METERS: 400, // Distance interval between safe zones
+  SHIELD_DURATION_S: 10,
+  COLOR: '#00E5FF',
+  GLOW: 'rgba(0, 229, 255, 0.35)',
 };
 
 export const OBSTACLE_CONFIG = {

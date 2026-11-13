@@ -11,7 +11,10 @@ try {
   console.log('[SoundManager] Native Sound module running in fallback mode', e);
 }
 
-const sounds = {};
+// Active sound instance registry: tracks both preparing and playing sounds to guarantee zero orphaned audio loops
+const activeSounds = new Map();
+let soundCounter = 0;
+let isDrivingActive = false;
 
 let musicEnabled = true;
 let effectsEnabled = true;
@@ -19,40 +22,44 @@ let vibrationEnabled = true;
 let musicVolume = 0.7;
 let effectsVolume = 0.8;
 
-let isAppActive = true;
-let wasMusicPlayingBeforeBackground = false;
-let wasEnginePlayingBeforeBackground = false;
+// Identify whether a sound is a continuous/in-race driving effect
+const isDrivingSound = (filename) => {
+  if (!filename) return false;
+  const lower = String(filename).toLowerCase();
+  return (
+    lower.includes('racing') ||
+    lower.includes('engine') ||
+    lower.includes('boost') ||
+    lower.includes('break') ||
+    lower.includes('brake') ||
+    lower.includes('dash')
+  );
+};
 
-// Guarantee audio NEVER plays when app is minimized or phone is locked/in background
+// Guarantee continuous background audio loops are paused when phone is minimized/locked
 if (AppState && typeof AppState.addEventListener === 'function') {
   AppState.addEventListener('change', (nextAppState) => {
-    const isForeground = nextAppState === 'active';
-    if (!isForeground) {
-      isAppActive = false;
-      wasMusicPlayingBeforeBackground = Boolean(sounds['racing.mp3']);
-      wasEnginePlayingBeforeBackground = Boolean(sounds['car_engine2.mp3']);
-
-      if (sounds['racing.mp3']) {
-        try { sounds['racing.mp3'].pause(); } catch {}
+    if (nextAppState === 'background') {
+      // Pause all active driving sounds while phone is backgrounded
+      for (const record of activeSounds.values()) {
+        if (record.isDriving && record.soundInstance) {
+          try { record.soundInstance.pause(); } catch {}
+        }
       }
-      if (sounds['car_engine2.mp3']) {
-        try { sounds['car_engine2.mp3'].pause(); } catch {}
+    } else if (nextAppState === 'active') {
+      // Resume driving sounds strictly if car is actively driving on track!
+      if (isDrivingActive) {
+        for (const record of activeSounds.values()) {
+          if (record.isDriving && record.soundInstance && !record.isStopped) {
+            try { record.soundInstance.play(); } catch {}
+          }
+        }
       }
-    } else {
-      isAppActive = true;
-      if (wasMusicPlayingBeforeBackground && musicEnabled && sounds['racing.mp3']) {
-        try { sounds['racing.mp3'].play(); } catch {}
-      }
-      if (wasEnginePlayingBeforeBackground && effectsEnabled && sounds['car_engine2.mp3']) {
-        try { sounds['car_engine2.mp3'].play(); } catch {}
-      }
-      wasMusicPlayingBeforeBackground = false;
-      wasEnginePlayingBeforeBackground = false;
     }
   });
 }
 
-// Normalized filename mapping: Strictly mapped to user's 10 maintained sound files
+// Normalized filename mapping: Strictly mapped to user's maintained audio files
 const SOUND_FILES = {
   // 1. Blast (blast.mp3)
   blast: 'blast.mp3',
@@ -81,8 +88,11 @@ const SOUND_FILES = {
   boosting: 'car_boosting.mp3',
   nitro: 'car_boosting.mp3',
 
-  // 3. Car Break (car_break.mp3)
+  // 3. Car Break & Break Effect (car_break.mp3 & break_effect.mp3)
   car_break: 'car_break.mp3',
+  break_effect: 'car_break.mp3',
+  carbreak: 'car_break.mp3',
+  breakeffect: 'car_break.mp3',
   brake: 'car_break.mp3',
   break: 'car_break.mp3',
   brake_sound: 'car_break.mp3',
@@ -92,8 +102,10 @@ const SOUND_FILES = {
 
   // 4. Car Dash & Health Case Collection (car_dash.mp3)
   car_dash: 'car_dash.mp3',
+  cardash: 'car_dash.mp3',
   dash: 'car_dash.mp3',
   dash_sound: 'car_dash.mp3',
+  boost_dash: 'car_dash.mp3',
   health: 'car_dash.mp3',
   health_pack: 'car_dash.mp3',
   health_sound: 'car_dash.mp3',
@@ -108,15 +120,24 @@ const SOUND_FILES = {
   engine: 'car_engine2.mp3',
   engine_loop: 'car_engine2.mp3',
 
-  // 6. Car Honk (car_honk.mp3)
+  // 6. Car Honk & Car Horn (car_honk.mp3 & car_horn.mp3)
   car_honk: 'car_honk.mp3',
+  car_horn: 'car_honk.mp3',
+  carhorn: 'car_honk.mp3',
+  carhonk: 'car_honk.mp3',
   honk: 'car_honk.mp3',
   horn: 'car_honk.mp3',
+  horn_sound: 'car_honk.mp3',
+  honk_sound: 'car_honk.mp3',
+  beep: 'car_honk.mp3',
 
-  // 7. Coin Collecting (coin_collecting.mp3)
+  // 7. Coin Collecting & Coin Collect (coin_collecting.mp3 & coin_collect.mp3)
   coin_collecting: 'coin_collecting.mp3',
-  coin: 'coin_collecting.mp3',
   coin_collect: 'coin_collecting.mp3',
+  coincollecting: 'coin_collecting.mp3',
+  coincollect: 'coin_collecting.mp3',
+  coin: 'coin_collecting.mp3',
+  coins: 'coin_collecting.mp3',
   coin_sound: 'coin_collecting.mp3',
   coin_voice: 'coin_collecting.mp3',
   collected_voice: 'coin_collecting.mp3',
@@ -156,6 +177,17 @@ const SOUND_FILES = {
   background: 'racing.mp3',
 };
 
+// Fallback alternate resource names if primary fails to load
+const FALLBACK_RESOURCE_MAP = {
+  car_honk: 'car_horn',
+  car_horn: 'car_honk',
+  coin_collecting: 'coin_collect',
+  coin_collect: 'coin_collecting',
+  car_break: 'break_effect',
+  break_effect: 'car_break',
+  car_dash: 'car_boosting',
+};
+
 const resolveSoundName = (rawName) => {
   if (!rawName) return null;
   const lower = String(rawName).toLowerCase().replace(/-/g, '_').replace(/\.mp3$/, '');
@@ -174,16 +206,27 @@ const SoundManager = {
    * @param {string} name - Sound file name (e.g. 'button_click.mp3' or 'coin_collect')
    * @param {boolean} loop - Whether to loop indefinitely
    * @param {number} volume - Volume level from 0 to 1
+   * @param {boolean} force - Force playback bypassing mute toggles (for sound test/preview)
    */
-  play(name, loop = false, volume = 1) {
-    if (!isAppActive) return;
+  play(name, loop = false, volume = 1, force = false) {
     const filename = resolveSoundName(name);
     if (!filename) return;
 
-    // Check mute preferences
     const isMusic = isMusicTrack(filename);
-    if (isMusic && !musicEnabled) return;
-    if (!isMusic && !effectsEnabled) return;
+    const isDriving = isDrivingSound(filename);
+
+    // STRICT DRIVING MODE RULE:
+    // When car is on track that time ONLY to play driving sounds!
+    // If driving is not active, block all driving sounds unless force=true (for Settings test preview)
+    if (isDriving && !isDrivingActive && !force) {
+      return;
+    }
+
+    // Check mute preferences unless force=true
+    if (!force) {
+      if (isMusic && !musicEnabled) return;
+      if (!isMusic && !effectsEnabled) return;
+    }
 
     // Trigger haptic vibration if enabled
     if (vibrationEnabled) {
@@ -202,64 +245,111 @@ const SoundManager = {
 
     if (!Sound) return;
 
-    const calculatedVolume = isMusic
-      ? volume * musicVolume
-      : volume * effectsVolume;
+    const calculatedVolume = force
+      ? volume
+      : (isMusic ? volume * musicVolume : volume * effectsVolume);
 
     const isLooping = Boolean(loop);
 
     // If looping track is already loaded and active, just set volume and keep playing
-    if (isLooping && sounds[filename]) {
-      try {
-        sounds[filename].setVolume(calculatedVolume);
-      } catch {}
-      return;
+    if (isLooping) {
+      for (const record of activeSounds.values()) {
+        if (record.filename === filename && record.isLooping && record.soundInstance && !record.isStopped) {
+          try {
+            record.soundInstance.setVolume(calculatedVolume);
+          } catch {}
+          return;
+        }
+      }
+      // Stop any existing instance of this looping sound before creating new
+      this.stop(filename);
     }
 
-    // Stop and release previous instance of this specific sound if playing
-    if (sounds[filename]) {
-      try {
-        sounds[filename].stop();
-        sounds[filename].release();
-      } catch {}
-      delete sounds[filename];
-    }
+    soundCounter++;
+    const currentSoundId = soundCounter;
+    const soundRecord = {
+      id: currentSoundId,
+      name,
+      filename,
+      isMusic,
+      isDriving,
+      isLooping,
+      soundInstance: null,
+      isStopped: false,
+    };
+    activeSounds.set(currentSoundId, soundRecord);
 
     const platformFileName = Platform.OS === 'android' ? filename.replace(/\.mp3$/, '') : filename;
     const bundlePath = Platform.OS === 'android' ? '' : (Sound.MAIN_BUNDLE || '');
 
-    try {
-      let soundInstance = null;
-      soundInstance = new Sound(platformFileName, bundlePath, (error) => {
-        if (error) {
-          console.warn('[SoundManager] Sound load note:', filename, error?.message || error);
-          if (sounds[filename] === soundInstance) {
-            delete sounds[filename];
-          }
-          return;
-        }
-
-        if (!soundInstance) return;
-
-        soundInstance.setVolume(calculatedVolume);
-        soundInstance.setNumberOfLoops(isLooping ? -1 : 0);
-
-        soundInstance.play((success) => {
-          if (!isLooping) {
-            try {
-              soundInstance.release();
-            } catch {}
-            if (sounds[filename] === soundInstance) {
-              delete sounds[filename];
+    const createAndPlay = (targetFileName, isRetry = false) => {
+      try {
+        let soundInstance = null;
+        soundInstance = new Sound(targetFileName, bundlePath, (error) => {
+          // If stopped while preparing, release immediately and exit
+          if (soundRecord.isStopped) {
+            if (soundInstance) {
+              try { soundInstance.release(); } catch {}
             }
+            activeSounds.delete(currentSoundId);
+            return;
+          }
+
+          // If driving became inactive while preparing, release and exit
+          if (soundRecord.isDriving && !isDrivingActive && !force) {
+            soundRecord.isStopped = true;
+            if (soundInstance) {
+              try { soundInstance.release(); } catch {}
+            }
+            activeSounds.delete(currentSoundId);
+            return;
+          }
+
+          if (error) {
+            // Check if fallback resource exists
+            const fallback = !isRetry ? FALLBACK_RESOURCE_MAP[targetFileName] : null;
+            if (fallback && !soundRecord.isStopped) {
+              createAndPlay(fallback, true);
+              return;
+            }
+            console.warn('[SoundManager] Sound load note:', targetFileName, error?.message || error);
+            activeSounds.delete(currentSoundId);
+            return;
+          }
+
+          if (!soundInstance) {
+            activeSounds.delete(currentSoundId);
+            return;
+          }
+
+          soundRecord.soundInstance = soundInstance;
+
+          try {
+            soundInstance.setVolume(calculatedVolume);
+            soundInstance.setNumberOfLoops(isLooping ? -1 : 0);
+
+            soundInstance.play((success) => {
+              if (!isLooping) {
+                try {
+                  soundInstance.release();
+                } catch {}
+                activeSounds.delete(currentSoundId);
+              }
+            });
+          } catch (playErr) {
+            console.warn('[SoundManager] play error:', playErr);
+            activeSounds.delete(currentSoundId);
           }
         });
-      });
 
-      sounds[filename] = soundInstance;
-    } catch (err) {
-      console.warn('[SoundManager] Play error for', filename, err);
-    }
+        soundRecord.soundInstance = soundInstance;
+      } catch (err) {
+        console.warn('[SoundManager] Play error for', targetFileName, err);
+        activeSounds.delete(currentSoundId);
+      }
+    };
+
+    createAndPlay(platformFileName);
   },
 
   /**
@@ -267,12 +357,38 @@ const SoundManager = {
    */
   stop(name) {
     const filename = resolveSoundName(name);
-    if (sounds[filename]) {
-      try {
-        sounds[filename].stop();
-        sounds[filename].release();
-      } catch {}
-      delete sounds[filename];
+    if (!filename) return;
+    const targetBase = filename.replace(/\.mp3$/, '').toLowerCase();
+    for (const [id, record] of activeSounds.entries()) {
+      const recBase = record.filename.replace(/\.mp3$/, '').toLowerCase();
+      if (recBase === targetBase || record.filename === filename) {
+        record.isStopped = true;
+        if (record.soundInstance) {
+          try {
+            record.soundInstance.stop();
+            record.soundInstance.release();
+          } catch {}
+        }
+        activeSounds.delete(id);
+      }
+    }
+  },
+
+  /**
+   * Stop and release all active driving sounds (engine, racing music, boost, brake, dash)
+   */
+  stopDrivingSounds() {
+    for (const [id, record] of activeSounds.entries()) {
+      if (record.isDriving) {
+        record.isStopped = true;
+        if (record.soundInstance) {
+          try {
+            record.soundInstance.stop();
+            record.soundInstance.release();
+          } catch {}
+        }
+        activeSounds.delete(id);
+      }
     }
   },
 
@@ -280,96 +396,122 @@ const SoundManager = {
    * Stop and release all active sounds
    */
   stopAll() {
-    wasMusicPlayingBeforeBackground = false;
-    wasEnginePlayingBeforeBackground = false;
-    Object.keys(sounds).forEach((filename) => {
-      this.stop(filename);
-    });
+    for (const record of activeSounds.values()) {
+      record.isStopped = true;
+      if (record.soundInstance) {
+        try {
+          record.soundInstance.stop();
+          record.soundInstance.release();
+        } catch {}
+      }
+    }
+    activeSounds.clear();
+  },
+
+  /**
+   * Set Driving Active mode:
+   * When car is on track: setDrivingActive(true) allows driving sounds.
+   * When car finishes/crashes/pauses/exits: setDrivingActive(false) immediately cuts all driving sounds!
+   */
+  setDrivingActive(active) {
+    isDrivingActive = Boolean(active);
+    if (!isDrivingActive) {
+      this.stopDrivingSounds();
+    }
+  },
+
+  isDriving() {
+    return isDrivingActive;
   },
 
   // Game Flow Convenience Methods
-  playEffect(key) {
-    this.play(key, false, 1);
+  playEffect(key, force = false) {
+    this.play(key, false, 1, force);
   },
 
-  playStartSound() {
-    this.play('engine_start.mp3', false, 1.0);
+  playStartSound(force = false) {
+    this.play('engine_start.mp3', false, 1.0, force);
   },
 
-  playMovingSound() {
-    this.startEngineLoop();
+  playMovingSound(force = false) {
+    this.startEngineLoop(force);
   },
 
   stopMovingSound() {
     this.stopEngineLoop();
   },
 
-  playBrake() {
-    this.play('brake', false, 1.0);
+  playBrake(force = false) {
+    this.play('car_break', false, 1.0, force);
   },
 
   stopBrake() {
-    this.stop('brake');
+    this.stop('car_break');
+    this.stop('break_effect');
   },
 
-  playBrakeSound() {
-    this.playBrake();
+  playBrakeSound(force = false) {
+    this.playBrake(force);
   },
 
   stopBrakeSound() {
     this.stopBrake();
   },
 
-  playDash() {
-    this.play('dash', false, 1);
+  playDash(force = false) {
+    this.play('car_dash', false, 1.0, force);
   },
 
-  playHealthSound() {
-    this.play('health', false, 1.0);
+  playHealthSound(force = false) {
+    this.play('health', false, 1.0, force);
   },
 
-  playBlastSound() {
-    this.play('blast', false, 1.0);
+  playBlastSound(force = false) {
+    this.play('blast', false, 1.0, force);
   },
 
-  playCrashSound() {
-    this.play('blast', false, 1.0);
+  playCrashSound(force = false) {
+    this.play('blast', false, 1.0, force);
   },
 
-  playAccidentSound() {
-    this.play('car_accident', false, 1.0);
+  playAccidentSound(force = false) {
+    this.play('car_accident', false, 1.0, force);
   },
 
-  playCollisionSound() {
-    this.play('car_collision', false, 1.0);
+  playCollisionSound(force = false) {
+    this.play('car_collision', false, 1.0, force);
   },
 
-  playHonkSound() {
-    this.play('car_honk', false, 1.0);
+  playHonkSound(force = false) {
+    this.play('car_honk', false, 1.0, force);
   },
 
-  playBoostSound() {
-    this.play('car_boosting', false, 1.0);
+  playHornSound(force = false) {
+    this.play('car_horn', false, 1.0, force);
+  },
+
+  playBoostSound(force = false) {
+    this.play('car_boosting', false, 1.0, force);
   },
 
   stopBoostSound() {
     this.stop('car_boosting');
   },
 
-  playCoinSound() {
-    this.play('coin_collecting', false, 1.0);
+  playCoinSound(force = false) {
+    this.play('coin_collecting', false, 1.0, force);
   },
 
-  playCoinVoice() {
-    this.play('coin_voice', false, 1.0);
+  playCoinVoice(force = false) {
+    this.play('coin_voice', false, 1.0, force);
   },
 
-  playCountdownSound() {
-    this.play('countdown_3_2_1_go', false, 1.0);
+  playCountdownSound(force = false) {
+    this.play('countdown_3_2_1_go', false, 1.0, force);
   },
 
-  playMusic() {
-    this.play('racing.mp3', true, 0.25);
+  playMusic(force = false) {
+    this.play('racing.mp3', true, 0.35, force);
   },
 
   stopMusic() {
@@ -377,14 +519,17 @@ const SoundManager = {
   },
 
   pauseMusic() {
-    const filename = 'racing.mp3';
-    if (sounds[filename]) {
-      sounds[filename].pause();
+    for (const record of activeSounds.values()) {
+      if (record.filename === 'racing.mp3' && record.soundInstance && !record.isStopped) {
+        try {
+          record.soundInstance.pause();
+        } catch {}
+      }
     }
   },
 
-  startEngineLoop() {
-    this.play('car_engine2.mp3', true, 0.7);
+  startEngineLoop(force = false) {
+    this.play('car_engine2.mp3', true, 0.7, force);
   },
 
   stopEngineLoop() {
@@ -392,12 +537,15 @@ const SoundManager = {
   },
 
   updateMovingSpeed(speedRatio) {
-    if (sounds['car_engine2.mp3']) {
-      const clamped = Math.max(0, Math.min(1, speedRatio));
-      const targetVol = (0.45 + clamped * 0.45) * effectsVolume;
-      try {
-        sounds['car_engine2.mp3'].setVolume(targetVol);
-      } catch {}
+    if (!isDrivingActive) return;
+    const clamped = Math.max(0, Math.min(1, speedRatio));
+    const targetVol = (0.45 + clamped * 0.45) * effectsVolume;
+    for (const record of activeSounds.values()) {
+      if (record.filename === 'car_engine2.mp3' && record.soundInstance && !record.isStopped) {
+        try {
+          record.soundInstance.setVolume(targetVol);
+        } catch {}
+      }
     }
   },
 
@@ -425,15 +573,23 @@ const SoundManager = {
 
   setMusicVolume(volume) {
     musicVolume = Math.max(0, Math.min(1, volume));
-    if (sounds['racing.mp3']) {
-      sounds['racing.mp3'].setVolume(musicVolume);
+    for (const record of activeSounds.values()) {
+      if (record.filename === 'racing.mp3' && record.soundInstance && !record.isStopped) {
+        try {
+          record.soundInstance.setVolume(musicVolume);
+        } catch {}
+      }
     }
   },
 
   setEffectsVolume(volume) {
     effectsVolume = Math.max(0, Math.min(1, volume));
-    if (sounds['car_engine2.mp3']) {
-      sounds['car_engine2.mp3'].setVolume(effectsVolume * 0.6);
+    for (const record of activeSounds.values()) {
+      if (record.filename === 'car_engine2.mp3' && record.soundInstance && !record.isStopped) {
+        try {
+          record.soundInstance.setVolume(effectsVolume * 0.6);
+        } catch {}
+      }
     }
   },
 
@@ -464,6 +620,7 @@ export const playCrashSound = SoundManager.playCrashSound.bind(SoundManager);
 export const playAccidentSound = SoundManager.playAccidentSound.bind(SoundManager);
 export const playCollisionSound = SoundManager.playCollisionSound.bind(SoundManager);
 export const playHonkSound = SoundManager.playHonkSound.bind(SoundManager);
+export const playHornSound = SoundManager.playHornSound.bind(SoundManager);
 export const playBoostSound = SoundManager.playBoostSound.bind(SoundManager);
 export const stopBoostSound = SoundManager.stopBoostSound.bind(SoundManager);
 export const playCoinSound = SoundManager.playCoinSound.bind(SoundManager);
@@ -484,5 +641,8 @@ export const setEffectsVolume = SoundManager.setEffectsVolume.bind(SoundManager)
 export const getMusicVolume = SoundManager.getMusicVolume.bind(SoundManager);
 export const getEffectsVolume = SoundManager.getEffectsVolume.bind(SoundManager);
 export const releaseSounds = SoundManager.releaseSounds.bind(SoundManager);
+export const setDrivingActive = SoundManager.setDrivingActive.bind(SoundManager);
+export const isDriving = SoundManager.isDriving.bind(SoundManager);
+export const stopDrivingSounds = SoundManager.stopDrivingSounds.bind(SoundManager);
 
 export default SoundManager;

@@ -25,7 +25,7 @@ export const CARS = [
     id: 'car_02',
     name: 'Neon Viper',
     tagline: 'High-speed electric beast',
-    price: 500,
+    price: 2000,
     isUnlocked: false,
     image: require('../assets/blue-car.png'),
     stats: {
@@ -47,7 +47,7 @@ export const CARS = [
     id: 'car_03',
     name: 'Phantom Shadow',
     tagline: 'Ultra agile drift machine',
-    price: 1200,
+    price: 4500,
     isUnlocked: false,
     image: require('../assets/white-car.png'),
     stats: {
@@ -69,7 +69,7 @@ export const CARS = [
     id: 'car_04',
     name: 'Thunder GT',
     tagline: 'Raw horsepower muscle',
-    price: 2500,
+    price: 7500,
     isUnlocked: false,
     image: require('../assets/yellow-car.png'),
     stats: {
@@ -91,7 +91,7 @@ export const CARS = [
     id: 'car_05',
     name: 'Cyber Valkyrie',
     tagline: 'Crimson carbon hypercar',
-    price: 5000,
+    price: 11000,
     isUnlocked: false,
     image: require('../assets/blackred-car.png'),
     stats: {
@@ -113,7 +113,7 @@ export const CARS = [
     id: 'car_06',
     name: 'Shadow Phantom',
     tagline: 'Stealth black night racer',
-    price: 8000,
+    price: 15000,
     isUnlocked: false,
     image: require('../assets/Black-car.png'),
     stats: {
@@ -130,6 +130,50 @@ export const CARS = [
     },
     themeColor: '#7C4DFF',
     icon: '🖤',
+  },
+  {
+    id: 'car_07',
+    name: 'Sonic Superbike',
+    tagline: 'Ultra-light supersonic motorcycle',
+    price: 18500,
+    isUnlocked: false,
+    image: require('../assets/bike.png'),
+    stats: {
+      speed: 98,
+      acceleration: 99,
+      handling: 96,
+      nitro: 95,
+    },
+    colors: {
+      body: '#00E5FF',
+      roof: '#161B22',
+      stripes: '#FF1744',
+      glow: 'rgba(0, 229, 255, 0.5)',
+    },
+    themeColor: '#00E5FF',
+    icon: '🏍️',
+  },
+  {
+    id: 'car_08',
+    name: 'Titan Hauler',
+    tagline: 'Heavy armored freight powerhouse',
+    price: 22000,
+    isUnlocked: false,
+    image: require('../assets/truck.png'),
+    stats: {
+      speed: 85,
+      acceleration: 88,
+      handling: 78,
+      nitro: 100,
+    },
+    colors: {
+      body: '#8B0000',
+      roof: '#1A1A1A',
+      stripes: '#FFFFFF',
+      glow: 'rgba(139, 0, 0, 0.5)',
+    },
+    themeColor: '#FF3D00',
+    icon: '🚚',
   },
 ];
 

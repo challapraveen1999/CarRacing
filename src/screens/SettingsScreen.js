@@ -25,9 +25,11 @@ import {
   playCollisionSound,
   playHealthSound,
   playHonkSound,
+  playHornSound,
   playCoinSound,
   playCoinVoice,
   playCountdownSound,
+  playBrakeSound,
 } from '../helpers/SoundManager';
 
 const SettingsScreen = ({ navigation }) => {
@@ -110,7 +112,7 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleTestSound = (label, filename, soundFn) => {
     try {
-      soundFn();
+      soundFn(true); // force=true guarantees preview sounds play even if effects/music are toggled off
       setActiveTestSound({ label, filename });
       setTimeout(() => {
         setActiveTestSound(prev => (prev?.label === label ? null : prev));
@@ -314,7 +316,7 @@ const SettingsScreen = ({ navigation }) => {
                 <Text style={styles.primaryTestIcon}>🪙</Text>
                 <View>
                   <Text style={[styles.primaryTestTitle, { color: '#FFE600' }]}>Coin Collecting</Text>
-                  <Text style={styles.primaryTestFile}>File: coin_collecting.mp3</Text>
+                  <Text style={styles.primaryTestFile}>coin_collecting.mp3 / coin_collect.mp3</Text>
                 </View>
               </View>
               <View style={[styles.testPlayBadge, { backgroundColor: 'rgba(255, 230, 0, 0.2)' }]}>
@@ -339,16 +341,16 @@ const SettingsScreen = ({ navigation }) => {
               </View>
             </TouchableOpacity>
 
-            {/* 3. Health Case Collecting Sound */}
+            {/* 3. Car Dash & Health Case Collecting Sound */}
             <TouchableOpacity
               style={[styles.primaryTestCard, { borderColor: '#00E676' }]}
               activeOpacity={0.7}
-              onPress={() => handleTestSound('Health Pack Collect', 'car_dash.mp3', playHealthSound)}>
+              onPress={() => handleTestSound('Car Dash Boost', 'car_dash.mp3', playDash)}>
               <View style={styles.testCardLeft}>
-                <Text style={styles.primaryTestIcon}>❤️</Text>
+                <Text style={styles.primaryTestIcon}>⚡</Text>
                 <View>
-                  <Text style={[styles.primaryTestTitle, { color: '#00E676' }]}>Health Case Collect</Text>
-                  <Text style={styles.primaryTestFile}>Repair Pack • File: car_dash.mp3</Text>
+                  <Text style={[styles.primaryTestTitle, { color: '#00E676' }]}>Car Dash & Boost</Text>
+                  <Text style={styles.primaryTestFile}>Speed surge & Repair • File: car_dash.mp3</Text>
                 </View>
               </View>
               <View style={[styles.testPlayBadge, { backgroundColor: 'rgba(0, 230, 118, 0.2)' }]}>
@@ -371,9 +373,17 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => handleTestSound('Dash Boost', 'car_dash.mp3', playDash)}>
-              <Text style={styles.previewChipIcon}>⚡</Text>
-              <Text style={styles.previewChipText}>Dash Boost</Text>
+              onPress={() => handleTestSound('Car Horn', 'car_horn.mp3', playHornSound)}>
+              <Text style={styles.previewChipIcon}>📯</Text>
+              <Text style={styles.previewChipText}>Car Horn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.previewChip}
+              activeOpacity={0.7}
+              onPress={() => handleTestSound('Car Honk', 'car_honk.mp3', playHonkSound)}>
+              <Text style={styles.previewChipIcon}>🎺</Text>
+              <Text style={styles.previewChipText}>Car Honk</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -387,9 +397,17 @@ const SettingsScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.previewChip}
               activeOpacity={0.7}
-              onPress={() => handleTestSound('Car Honk', 'car_honk.mp3', playHonkSound)}>
-              <Text style={styles.previewChipIcon}>🎺</Text>
-              <Text style={styles.previewChipText}>Car Honk</Text>
+              onPress={() => handleTestSound('Break Effect', 'break_effect.mp3', playBrakeSound)}>
+              <Text style={styles.previewChipIcon}>🔊</Text>
+              <Text style={styles.previewChipText}>Break Effect</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.previewChip}
+              activeOpacity={0.7}
+              onPress={() => handleTestSound('Health Pack', 'car_dash.mp3', playHealthSound)}>
+              <Text style={styles.previewChipIcon}>❤️</Text>
+              <Text style={styles.previewChipText}>Health Pack</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

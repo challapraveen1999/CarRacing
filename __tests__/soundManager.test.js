@@ -15,6 +15,7 @@ import {
   playAccidentSound,
   playCollisionSound,
   playHonkSound,
+  playHornSound,
   playBoostSound,
   playCoinSound,
   playCoinVoice,
@@ -25,6 +26,9 @@ import {
   setVibrationEnabled,
   setMusicVolume,
   setEffectsVolume,
+  setDrivingActive,
+  isDriving,
+  stopDrivingSounds,
 } from '../src/helpers/SoundManager';
 
 describe('SoundManager', () => {
@@ -35,6 +39,7 @@ describe('SoundManager', () => {
     setVibrationEnabled(true);
     setMusicVolume(0.8);
     setEffectsVolume(0.8);
+    setDrivingActive(true);
   });
 
   afterEach(() => {
@@ -69,6 +74,7 @@ describe('SoundManager', () => {
     expect(() => playAccidentSound()).not.toThrow();
     expect(() => playCollisionSound()).not.toThrow();
     expect(() => playHonkSound()).not.toThrow();
+    expect(() => playHornSound()).not.toThrow();
     expect(() => playBoostSound()).not.toThrow();
     expect(() => playCoinSound()).not.toThrow();
     expect(() => playCoinVoice()).not.toThrow();
@@ -107,5 +113,18 @@ describe('SoundManager', () => {
     play('engine_start');
     play('engine_loop', true);
     expect(() => stopAll()).not.toThrow();
+  });
+
+  it('controls driving active mode strictly to play driving sounds only when car is on track', () => {
+    setDrivingActive(true);
+    expect(isDriving()).toBe(true);
+    expect(() => playMovingSound()).not.toThrow();
+
+    setDrivingActive(false);
+    expect(isDriving()).toBe(false);
+    // Driving sounds are immediately blocked when car is not on track
+    expect(() => playMovingSound()).not.toThrow();
+    expect(() => playBrake()).not.toThrow();
+    expect(() => stopDrivingSounds()).not.toThrow();
   });
 });
